@@ -8,9 +8,14 @@ globals
  last-total-taken ;;keeping track of how much food gets taken each turn (resets each turn)
  all-time-taken ;;how much has ever been taken
  good-patches ;;to figure out where to place the student avatars (just visual) ;;stolen from public good model
+ invisibles
+
 ]
 
 breed [students student]
+breed [invisibles1 invisible1]
+breed [invisibles2 invisible2] ;;purely for goodpatches layout purposes
+breed [banners banner] ;;dummy turtles for the students' labels (to change their position)
 
 students-own [
   user-id ;;the client name
@@ -19,19 +24,21 @@ students-own [
   my-plan ;;how much they plan to take - overwrites if they move the take-this slider multiple times
 ]
 
+banners-own [banner-my-food] ;;@use this to update label
+
 to startup
-  ;;hubnet-reset ;;REMOVED HUBNET-RESET (not needed?) + causing problems for gbcc-browser?!
+  ;;hubnet-reset ;;@REMOVE THIS LINE TO WORK WITH GBCC AND HEROKU IN BROWSER
   setup
 end
 
 to setup
   clear-patches
+  ask banners [die]
   clear-all-plots
   clear-output
   clear-drawing
   listen-clients ;;this creates the new students
   start-over ;;resets all global and student values + updates their view ;;also sets up patches
-  ;;display-labels ;;maybe add this as a toggle option@
   reset-ticks
 end
 
@@ -42,14 +49,16 @@ to go ;;this just ticks away, updating the view
     stop]
 
   listen-clients ;;get commands and data from clients
-  every 0.5 [
+  every 0.3 [
    ask students [
       ;;(could add an ifelse as in the public goods library model - to show or hide labels
-     set label (word user-id ". Food: " my-food) ;;could add label with what they took last time@
+     ;;set label (word "Food: " my-food)
+      ;;@CHANGE THE LABEL OF THEIR BANNER
     ]
     ask patch 0 0 [set plabel food-supply]
   ]
     ;;more?
+  ask banners [reposition] ;;@?
 tick
 end
 
@@ -71,7 +80,14 @@ to play ;;this takes the food and advances! by the press of the button!
    ;; output-print (word "food: " my-food " , took: " my-plan) ;;to make non-anonymous: use output-show ;;USE THIS TO SHOW WHAT PEOPLE DID
     ;;output-show (word "Food: " my-food ". I took: " my-plan)
     set my-food (my-food + my-plan)
-      set my-plan 0] ;;resets/makes their plan 0 for next round
+      set my-plan 0 ;;resets/makes their plan 0 for next round
+    ] ;;ASK STUDENTS ends here
+
+    ;;CHANGE DUMMY LABELS BY ASKING THE BANNERS DIRECTLY
+   ask banners [
+      set banner-my-food [my-food] of one-of in-link-neighbors ;;@GIRAF NOT WORKING
+      set label word "My food: " banner-my-food
+    ]
 
    ;;MULTIPLY THE GOODS
   set old-food-supply food-supply
@@ -101,11 +117,22 @@ to start-over ;;reset global and student values
   set last-total-taken 0
   set all-time-taken 0
   set food-supply food-at-start
-  set good-patches patches with [pxcor mod 2 = 0 xor pycor mod 2 = 0 and (abs(pxcor - min-pxcor) > 2)]
-  ;;^^good-patches stolen from public good model! it's like a checker board pattern
+  layout-patches ;;for where to place students visually + the middle food patch
+  ask students [
+    reset-student-food
+    set color base-color
+    attach-banner "My food: 0"
+  ] ;;this also updates all their monitors
+end
+
+to layout-patches
+  ask invisibles1 [die] ask invisibles2 [die] ;;gets rid of any earlier ones
+  create-invisibles1 10 create-invisibles2 10 ;;@or the nr of students participating
+  layout-circle invisibles1 8 layout-circle invisibles2 13
+  ask invisibles1 [hide-turtle] ask invisibles2 [hide-turtle] ;;they're invisible, but used for the good-patches
+  set good-patches patches with [count invisibles1-here = 1 or count invisibles2-here = 1]
   ;;ask good-patches [set pcolor red] ;;@just to check what the good-patches look like if changing setup, purely aesthetic ;-)
   ask patch 0 0 [set plabel-color white set plabel food-supply] ;;number representing the common food supply
-  ask students [reset-student-food] ;;this also updates all their monitors
 end
 
 to reset-student-food ;;student procedure, updates their view
@@ -153,7 +180,8 @@ to execute-command [command]
   [
     ask students with [user-id = hubnet-message-source]
      [
-        set color pink ;;means they have decided
+        if my-plan > 0 [ ;;to make sure they didn't just click ready but didn't move the slider so my-plan didn't update ;;@could instead save old my-plan?
+          set color gray ] ;;means they have decided
         hubnet-send user-id "My plan" my-plan ;;de kan se deres nuværende plan. først når der trykkes play, opdateres deres mad
         ;;@set my-final-plan my-plan ;;is this clumsy programming? - make sure this change makes it automatically advance in 'play'?
     ]
@@ -171,19 +199,50 @@ end
 to setup-student-vars ;;turtle procedure
   set user-id hubnet-message-source
   set shape "person"
-  set size 2
-  set base-color one-of [blue green orange red yellow cyan violet]
+  set size 1.5
+  set base-color one-of [14 17 24 27 45 54 66 75 85 95 104 114 117 124 127 134 137 9.9]
   set color base-color
   set label-color white
   set my-food 0
   set my-plan 0 ;;can change default
   ;;find a good visual position:
-  let my-patch one-of good-patches with [not any? turtles-here]
+  let my-patch one-of good-patches with [not any? students-here]
   ifelse(my-patch != nobody)
     [move-to my-patch]
   [setxy random-xcor random-ycor]
-  ;;more stuff??
+
+  ;;attach the dummy breed for better label positioning:
+  attach-banner "My food: 0" ;;clumsy coding right now - manually string sets it to 0 until my-food is updated in 'to play'
+
+  ;;@display-labels ;;maybe add this as a toggle option
 end
+
+to attach-banner [x]
+  hatch-banners 1 [
+   set size 0
+   set label x
+    ;;set banner-my-food ;;@SET IT THE MY-FOOD OF THE ATTACHED TURTLE! (giraf)
+   create-link-from myself [
+     tie
+     hide-link
+    ]
+  ]
+end
+
+to reposition ;;banner procedure
+  ifelse count in-link-neighbors > 0 [ ;;prevents it from crashing when a client exits
+  move-to one-of in-link-neighbors ;;@use this link call to set the label to that student's food supply!
+
+  let banner-angle 132 ;;@can change this
+  let banner-distance 2.60
+
+  set heading banner-angle
+  forward banner-distance
+  ]
+  [die] ;;if their neighbor/client has left
+end
+
+
 
 to send-info-to-clients ;;turtle procedure
   hubnet-send user-id "My food" my-food
@@ -192,15 +251,15 @@ to send-info-to-clients ;;turtle procedure
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-346
+270
 10
-783
-448
+802
+543
 -1
 -1
-13.0
+15.9
 1
-10
+12
 1
 1
 1
@@ -219,25 +278,25 @@ ticks
 30.0
 
 SLIDER
-27
-76
-199
-109
+30
+60
+239
+93
 food-at-start
 food-at-start
 1
-100
-50.0
+300
+100.0
 1
 1
 NIL
 HORIZONTAL
 
 MONITOR
-279
-27
-336
-72
+13
+152
+70
+197
 NIL
 turn
 17
@@ -245,10 +304,10 @@ turn
 11
 
 BUTTON
-111
-23
-174
-56
+102
+12
+165
+45
 NIL
 go
 T
@@ -262,10 +321,10 @@ NIL
 1
 
 BUTTON
-28
 22
-91
-55
+12
+85
+45
 NIL
 setup
 NIL
@@ -279,10 +338,10 @@ NIL
 1
 
 BUTTON
-192
-24
-255
-57
+184
+12
+247
+45
 NIL
 play
 NIL
@@ -296,10 +355,10 @@ NIL
 1
 
 MONITOR
-258
-88
-337
-133
+80
+152
+159
+197
 NIL
 food-supply
 17
@@ -307,10 +366,10 @@ food-supply
 11
 
 MONITOR
-242
-150
-340
-195
+168
+152
+258
+197
 NIL
 last-total-taken
 17
@@ -318,10 +377,10 @@ last-total-taken
 11
 
 MONITOR
-247
-207
-335
-252
+168
+203
+256
+248
 NIL
 all-time-taken
 17
@@ -340,22 +399,22 @@ TEXTBOX
 49
 1155
 67
-OVERVIEW OF STUFF
+OVERVIEW
 14
 0.0
 1
 
 SLIDER
-27
-131
-199
-164
+30
+104
+239
+137
 multiplier
 multiplier
-0
+1
 5
-2.0
-0.1
+1.0
+1
 1
 NIL
 HORIZONTAL
