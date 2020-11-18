@@ -87,7 +87,7 @@ to play ;;this takes the food and advances! by the press of the button!
     ]
 
    ;;MULTIPLY THE GOODS
-  set old-food-supply food-supply
+
   set food-supply (multiplier * food-supply) ;;could change this multiplier, or maybe make a more complicated formula? Or add randomness?
 
   output-print (word "There were " (old-food-supply + last-total-taken) " fish.")
@@ -98,6 +98,8 @@ to play ;;this takes the food and advances! by the press of the button!
 
   ;;update the function monitor (for the students to see mathematically what happened last round)
    set current-function (word "f(x)  =  " multiplier " * (" old-food-supply " - " last-total-taken ")  =  " food-supply)
+
+    set old-food-supply food-supply
 
   ask students [ ;;update the values on the clients' interfaces ;;@COULD SEND THEM MORE INFO ABOUT THE BEHAVIOR OF THE OTHERS?
     hubnet-send user-id "My food" my-food
