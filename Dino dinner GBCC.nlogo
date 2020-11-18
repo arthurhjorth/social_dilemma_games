@@ -90,8 +90,8 @@ to play ;;this takes the food and advances! by the press of the button!
 
   set food-supply (multiplier * food-supply) ;;could change this multiplier, or maybe make a more complicated formula? Or add randomness?
 
-  output-print (word "There were " (old-food-supply + last-total-taken) " fish.")
-  output-print (word last-total-taken " fish were taken this round, leaving " old-food-supply ".")
+  output-print (word "There were " old-food-supply " fish.")
+  output-print (word last-total-taken " fish were taken this round, leaving " (old-food-supply - last-total-taken) ".")
   output-print (word "After being multiplied by " multiplier ", now there are " food-supply " fish in total.")
   ;;hubnet-broadcast-message (word last-total-taken " candies were taken this round, leaving " old-food-supply ".") ;;ONLY WORKS FOR HUBNET, NOT BROWSER-GBCC-APP
   ;;hubnet-broadcast-message (word "After MAGIC with the power of " multiplier ", now there are " food-supply " candies in total.")
@@ -119,6 +119,7 @@ to start-over ;;reset global and student values
   set last-total-taken 0
   set all-time-taken 0
   set food-supply food-at-start
+  set old-food-supply food-supply
   layout-patches ;;for where to place students visually + the middle food patch
   ask students [
     reset-student-food
