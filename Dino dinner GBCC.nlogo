@@ -1,5 +1,3 @@
-;;extensions [gbcc] ;;currently not working
-
 globals
 [
  turn ;;keeps track of what turn it is
@@ -7,6 +5,8 @@ globals
  food-supply ;;the shared food supply
  last-total-taken ;;keeping track of how much food gets taken each turn (resets each turn)
  all-time-taken ;;how much has ever been taken
+ current-function ;;to display the linear function used for multiplication
+
  good-patches ;;to figure out where to place the student avatars (just visual) ;;stolen from public good model
  invisibles
 
@@ -16,6 +16,7 @@ breed [students student]
 breed [invisibles1 invisible1]
 breed [invisibles2 invisible2] ;;purely for goodpatches layout purposes
 breed [banners banner] ;;dummy turtles for the students' labels (to change their position)
+breed [standins standin]
 
 students-own [
   user-id ;;the client name
@@ -33,10 +34,11 @@ end
 
 to setup
   clear-patches
-  ask banners [die]
+  ask banners [die] ask standins [die]
   clear-all-plots
   clear-output
   clear-drawing
+  set current-function "Play first round to update"
   listen-clients ;;this creates the new students
   start-over ;;resets all global and student values + updates their view ;;also sets up patches
   reset-ticks
@@ -50,20 +52,15 @@ to go ;;this just ticks away, updating the view
 
   listen-clients ;;get commands and data from clients
   every 0.3 [
-   ask students [
-      ;;(could add an ifelse as in the public goods library model - to show or hide labels
-     ;;set label (word "Food: " my-food)
-      ;;@CHANGE THE LABEL OF THEIR BANNER
-    ]
-    ask patch 0 0 [set plabel food-supply]
+    ask patch 0 -1 [set plabel food-supply]
   ]
-    ;;more?
-  ask banners [reposition] ;;@?
+
+  ask banners [reposition] ;;updates the banners' labels with each client's food supply
+
 tick
 end
 
 to play ;;this takes the food and advances! by the press of the button!
-  ;;IF IT IS TIME (should be automatically done if all are pink?)
   set last-total-taken 0 ;;reset the value from last round
   set last-total-taken (sum [my-plan] of students) ;;how much the students take in total
   set all-time-taken (all-time-taken + last-total-taken)
@@ -77,34 +74,37 @@ to play ;;this takes the food and advances! by the press of the button!
 
   ask students [
     set color base-color
-   ;; output-print (word "food: " my-food " , took: " my-plan) ;;to make non-anonymous: use output-show ;;USE THIS TO SHOW WHAT PEOPLE DID
-    ;;output-show (word "Food: " my-food ". I took: " my-plan)
-    set my-food (my-food + my-plan)
+   ;;@ output-print (word "food: " my-food " , took: " my-plan) ;;to make non-anonymous: use output-show ;;USE THIS TO SHOW WHAT PEOPLE DID
+      ;;output-show (word "Food: " my-food ". I took: " my-plan)
+      if my-plan != "TOO GREEDY!" [ set my-food (my-food + my-plan)] ;;the if-statement is to get around "TOO GREEDY!"
       set my-plan 0 ;;resets/makes their plan 0 for next round
     ] ;;ASK STUDENTS ends here
 
     ;;CHANGE DUMMY LABELS BY ASKING THE BANNERS DIRECTLY
    ask banners [
-      set banner-my-food [my-food] of one-of in-link-neighbors ;;@GIRAF NOT WORKING
-      set label word "My food: " banner-my-food
+      set banner-my-food [my-food] of one-of in-link-neighbors ;;shows label with their food
+      set label word "Food: " banner-my-food
     ]
 
    ;;MULTIPLY THE GOODS
   set old-food-supply food-supply
   set food-supply (multiplier * food-supply) ;;could change this multiplier, or maybe make a more complicated formula? Or add randomness?
 
-  output-print (word last-total-taken " candies were taken this round, leaving " old-food-supply ".")
-  output-print (word "After MAGIC with the power of " multiplier ", now there are " food-supply " candies in total.")
-  ;;hubnet-broadcast-message (word last-total-taken " candies were taken this round, leaving " old-food-supply ".")
+  output-print (word "There were " (old-food-supply + last-total-taken) " fish.")
+  output-print (word last-total-taken " fish were taken this round, leaving " old-food-supply ".")
+  output-print (word "After being multiplied by " multiplier ", now there are " food-supply " fish in total.")
+  ;;hubnet-broadcast-message (word last-total-taken " candies were taken this round, leaving " old-food-supply ".") ;;ONLY WORKS FOR HUBNET, NOT BROWSER-GBCC-APP
   ;;hubnet-broadcast-message (word "After MAGIC with the power of " multiplier ", now there are " food-supply " candies in total.")
 
-  ;;@COULD SEND THEM MORE INFO ABOUT THE BEHAVIOR OF THE OTHERS?
+  ;;update the function monitor (for the students to see mathematically what happened last round)
+   set current-function (word "f(x)  =  " multiplier " * (" old-food-supply " - " last-total-taken ")  =  " food-supply)
 
-  ask students [ ;;update the values on the clients' monitors
+  ask students [ ;;update the values on the clients' interfaces ;;@COULD SEND THEM MORE INFO ABOUT THE BEHAVIOR OF THE OTHERS?
     hubnet-send user-id "My food" my-food
     hubnet-send user-id "Turn nr" turn
     hubnet-send user-id "Food supply" food-supply
     hubnet-send user-id "My plan" my-plan
+    hubnet-send user-id "Function" current-function
   ] ;;this works!!! any other things I want to update in their interface?
 
   ] ;;END OF IF-LOOP (if there is still food)
@@ -121,7 +121,8 @@ to start-over ;;reset global and student values
   ask students [
     reset-student-food
     set color base-color
-    attach-banner "My food: 0"
+    set my-plan 0 ;;giraf?
+    attach-banner "Food: 0"
   ] ;;this also updates all their monitors
 end
 
@@ -132,7 +133,11 @@ to layout-patches
   ask invisibles1 [hide-turtle] ask invisibles2 [hide-turtle] ;;they're invisible, but used for the good-patches
   set good-patches patches with [count invisibles1-here = 1 or count invisibles2-here = 1]
   ;;ask good-patches [set pcolor red] ;;@just to check what the good-patches look like if changing setup, purely aesthetic ;-)
-  ask patch 0 0 [set plabel-color white set plabel food-supply] ;;number representing the common food supply
+
+  ;;the food in the middle:
+  ask patch 0 0 [sprout-standins 1 [set color 56 set shape "fish" set size 1.5]] ;;just visual food ;)
+  ask patch 0 -1 [set plabel-color white set plabel food-supply] ;;number representing the common food supply
+  ask patches [ifelse (distancexy 0 0) < 2 = TRUE [set pcolor 103] [set pcolor black]] ;;a little cute lake ;;@make it less square and ugly?
 end
 
 to reset-student-food ;;student procedure, updates their view
@@ -140,6 +145,7 @@ to reset-student-food ;;student procedure, updates their view
   hubnet-send user-id "My food" 0 ;;sets it to 0 in the client view as well
   hubnet-send user-id "Food supply" food-at-start ;;update their view
   hubnet-send user-id "Turn nr" turn
+  hubnet-send user-id "Function" current-function ;;giraf
 end
 
 
@@ -172,7 +178,15 @@ to execute-command [command]
   [
     ask students with [user-id = hubnet-message-source] ;;the student who took this amount
     [
-      set my-plan hubnet-message ;;what they plan to take
+      ifelse limit-on = TRUE [
+        ifelse hubnet-message <= food-supply / count students
+        [set my-plan hubnet-message] ;;what they plan to take - if it's not too greedy!
+        [set my-plan "TOO GREEDY!"]
+      ] ;;if limit on end bracket
+      [set my-plan hubnet-message] ;;if limit-on is FALSE
+
+
+
     ]
   ]
 
@@ -180,7 +194,8 @@ to execute-command [command]
   [
     ask students with [user-id = hubnet-message-source]
      [
-        if my-plan > 0 [ ;;to make sure they didn't just click ready but didn't move the slider so my-plan didn't update ;;@could instead save old my-plan?
+        if my-plan = "TOO GREEDY!" [set color base-color] ;;to catch those that might choose correctly, turn gray, but then choose greedily (and not just stay gray)...
+        if my-plan != "TOO GREEDY!" and my-plan >= 0 [ ;;to make sure they didn't just click ready but didn't move the slider so my-plan didn't update ;;@could instead save old my-plan?
           set color gray ] ;;means they have decided
         hubnet-send user-id "My plan" my-plan ;;de kan se deres nuværende plan. først når der trykkes play, opdateres deres mad
         ;;@set my-final-plan my-plan ;;is this clumsy programming? - make sure this change makes it automatically advance in 'play'?
@@ -212,7 +227,7 @@ to setup-student-vars ;;turtle procedure
   [setxy random-xcor random-ycor]
 
   ;;attach the dummy breed for better label positioning:
-  attach-banner "My food: 0" ;;clumsy coding right now - manually string sets it to 0 until my-food is updated in 'to play'
+  attach-banner "Food: 0" ;;clumsy coding right now - manually string sets it to 0 until my-food is updated in 'to play'
 
   ;;@display-labels ;;maybe add this as a toggle option
 end
@@ -221,7 +236,6 @@ to attach-banner [x]
   hatch-banners 1 [
    set size 0
    set label x
-    ;;set banner-my-food ;;@SET IT THE MY-FOOD OF THE ATTACHED TURTLE! (giraf)
    create-link-from myself [
      tie
      hide-link
@@ -233,8 +247,8 @@ to reposition ;;banner procedure
   ifelse count in-link-neighbors > 0 [ ;;prevents it from crashing when a client exits
   move-to one-of in-link-neighbors ;;@use this link call to set the label to that student's food supply!
 
-  let banner-angle 132 ;;@can change this
-  let banner-distance 2.60
+  let banner-angle 142 ;;@can change this
+  let banner-distance 2.20
 
   set heading banner-angle
   forward banner-distance
@@ -248,6 +262,7 @@ to send-info-to-clients ;;turtle procedure
   hubnet-send user-id "My food" my-food
   hubnet-send user-id "Food supply" food-supply
   hubnet-send user-id "Turn nr" turn
+  hubnet-send user-id "Function" current-function
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -297,7 +312,7 @@ MONITOR
 152
 70
 197
-NIL
+Turn
 turn
 17
 1
@@ -309,7 +324,7 @@ BUTTON
 165
 45
 NIL
-go
+Go
 T
 1
 T
@@ -323,9 +338,9 @@ NIL
 BUTTON
 22
 12
-85
+86
 45
-NIL
+Setup
 setup
 NIL
 1
@@ -343,7 +358,7 @@ BUTTON
 247
 45
 NIL
-play
+Play
 NIL
 1
 T
@@ -357,9 +372,9 @@ NIL
 MONITOR
 80
 152
-159
+160
 197
-NIL
+Food supply
 food-supply
 17
 1
@@ -368,9 +383,9 @@ food-supply
 MONITOR
 168
 152
-258
+256
 197
-NIL
+Last food eaten
 last-total-taken
 17
 1
@@ -381,7 +396,7 @@ MONITOR
 203
 256
 248
-NIL
+All time eaten
 all-time-taken
 17
 1
@@ -390,7 +405,7 @@ all-time-taken
 OUTPUT
 814
 76
-1458
+1323
 258
 11
 
@@ -418,6 +433,48 @@ multiplier
 1
 NIL
 HORIZONTAL
+
+MONITOR
+952
+321
+1164
+366
+Function
+current-function
+17
+1
+11
+
+TEXTBOX
+865
+280
+1252
+331
+                                  THE  FUNCTION\nnew-food-supply = multiplier * (old-food-supply - total-taken)
+14
+0.0
+1
+
+SWITCH
+26
+214
+129
+247
+limit-on
+limit-on
+0
+1
+-1000
+
+TEXTBOX
+14
+252
+164
+280
+If on: students can only take 'their proportion' of the food
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -766,47 +823,25 @@ NetLogo 6.1.1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
-VIEW
-202
-10
-631
-439
-0
-0
-0
-1
-1
-1
-1
-1
-0
-1
-1
-1
--16
-16
--16
-16
-
 MONITOR
-15
-18
-79
+20
 67
+84
+116
 My food
 NIL
 3
 1
 
 SLIDER
-17
-76
-189
-109
+16
+121
+188
+154
 take-this
 take-this
 0.0
-100.0
+30.0
 0
 1.0
 1
@@ -814,40 +849,40 @@ NIL
 HORIZONTAL
 
 MONITOR
-29
-172
-109
-221
+27
+213
+107
+262
 Food supply
 NIL
 3
 1
 
 MONITOR
-119
-172
-176
-221
+116
+214
+173
+263
 Turn nr
 NIL
 3
 1
 
 MONITOR
-130
-19
-187
-68
+99
+67
+185
+116
 My plan
 NIL
 3
 1
 
 BUTTON
-51
-119
-155
-152
+50
+164
+154
+197
 Ready to eat
 NIL
 NIL
@@ -856,6 +891,48 @@ T
 OBSERVER
 NIL
 NIL
+
+TEXTBOX
+756
+133
+1146
+177
+                                  THE  FUNCTION\nnew-food-supply = multiplier * (old-food-supply - total-taken)
+14
+0.0
+1
+
+MONITOR
+805
+177
+1095
+226
+Function
+NIL
+3
+1
+
+VIEW
+215
+11
+740
+536
+0
+0
+0
+1
+1
+1
+1
+1
+0
+1
+1
+1
+-16
+16
+-16
+16
 
 @#$#@#$#@
 default
