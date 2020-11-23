@@ -19,10 +19,11 @@ particles-own
   speed mass energy          ;; particle info
   last-collision
   delta-e
-  state
+;  state ;; AH: let's change this to a boolean called excited. It'll be easier to work with.
+  excited?
 ]
 
-photons-own [speed last-collision ]
+photons-own [speed last-collision frequency]
 
 
 to setup
@@ -72,9 +73,43 @@ to go
   display
 end
 
+to-report magnetized-delta-e
+  ;; AH: delta-e will increase the effective delta-e, so let's try somethig like this:
+  report e * magnetic-field / ( distance patch 0 0) ^ 2
+end
+
+to-report resonance? ;; AH: particle procedure
+  if not any? photons-here [report false]
+  let potential-photon one-of photons-here
+  ;; now we have to find out the relative speed of the photon to the particle, in order to account for dobbler effect
+  let relative-angle heading - [heading] of potential-photon
+  let rel-speed abs sin relative-angle
+  ;; if relative angle is between 270 and 90 then we are moving "with" the particle and we lower the frequency
+  ;; else we increase it.
+  ;; AH: using this: https://courses.lumenlearning.com/suny-osuniversityphysics/chapter/17-7-the-doppler-effect/#:~:text=Use%20the%20following%20equation%3A,due%20to%20a%20moving%20observer.
+  ;; it seems that  it's really just 1 / relative speed
+  ;; So:
+  if relative-angle = 90 or relative-angle = 270 [ ;;AH: special case, but it would work to include it in the if below since it would just be frequcny + 0 * frequency
+    report current-delta-e = frequency
+  ]
+  if relative-angle < 90 or relative-angle > 270 [ ;; moving towards
+   report current-delta-e = frequency + (rel-speed * frequency)
+  ]
+  if relative-angle > 90 and  relative-angle < 270 [ ;; moving aawy from
+   report current-delta-e = frequency - (rel-speed * frequency)
+  ]
+
+end
+
+to-report current-delta-e ;; AH: this reports whatever we should calculate the delta-e for for a particle
+  if magnetic-field > 0 [report magnetized-delta-e]
+  report delta-e
+end
+
+
 to make-photons ;;@make this work - define their heading!
+  ; AH: nice :)
   let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
-  print n
   ask patch 0 max-pycor [ ;;@CLUMSY NOW. Top patch
     sprout-photons n [
       set color white
@@ -102,6 +137,7 @@ to make-photons ;;@make this work - define their heading!
 
 
 end
+
 
 
 to calculate-tick-delta
@@ -349,8 +385,8 @@ to setup-particle  ;; particle procedure
   set mass particle-mass
   set energy (0.5 * mass * speed * speed)
   set last-collision nobody
-  set state "ground" ;;@
   set delta-e particle-delta-e ;;@
+  set excited? false
 end
 
 ;; place particle at random location inside the box.
@@ -435,10 +471,10 @@ NIL
 1
 
 SLIDER
-22
-451
-315
-484
+18
+590
+311
+623
 number-of-particles
 number-of-particles
 1
@@ -450,10 +486,10 @@ NIL
 HORIZONTAL
 
 MONITOR
-9
-249
-128
-294
+0
+430
+119
+475
 average speed
 avg-speed
 2
@@ -461,10 +497,10 @@ avg-speed
 11
 
 PLOT
-1141
-12
-1431
-208
+1089
+435
+1379
+631
 Energy Histogram
 energy
 count
@@ -483,10 +519,10 @@ PENS
 "init-avg-energy" 1.0 0 -16777216 true "draw-vert-line init-avg-energy" ""
 
 MONITOR
-188
-252
-317
-297
+179
+433
+308
+478
 average energy
 avg-energy
 2
@@ -494,10 +530,10 @@ avg-energy
 11
 
 PLOT
-833
-13
-1122
-210
+1080
+33
+1369
+230
 Speed Counts
 ticks
 count (%)
@@ -514,10 +550,10 @@ PENS
 "slow" 1.0 0 -13345367 true "" "plotxy ticks percent-slow"
 
 SWITCH
-99
-74
-202
-107
+188
+309
+291
+342
 collide?
 collide?
 1
@@ -525,10 +561,10 @@ collide?
 -1000
 
 PLOT
-831
-216
-1125
-413
+1086
+235
+1380
+432
 Speed Histogram
 speed
 count
@@ -547,10 +583,10 @@ PENS
 "init-avg-speed" 1.0 0 -16777216 true "draw-vert-line init-avg-speed" ""
 
 MONITOR
-10
-306
-107
-351
+1
+487
+98
+532
 percent fast
 percent-fast
 0
@@ -558,10 +594,10 @@ percent-fast
 11
 
 MONITOR
-113
-306
-216
-351
+104
+487
+207
+532
 percent medium
 percent-medium
 0
@@ -569,10 +605,10 @@ percent-medium
 11
 
 MONITOR
-226
-306
-318
-351
+217
+487
+309
+532
 percent slow
 percent-slow
 0
@@ -580,10 +616,10 @@ percent-slow
 11
 
 SLIDER
-10
-206
-189
-239
+6
+345
+185
+378
 box-size
 box-size
 5
@@ -595,10 +631,10 @@ box-size
 HORIZONTAL
 
 SLIDER
-11
-123
-190
-156
+7
+262
+186
+295
 init-particle-speed
 init-particle-speed
 1
@@ -610,10 +646,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-10
-164
-189
-197
+6
+303
+185
+336
 particle-mass
 particle-mass
 1
@@ -625,10 +661,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-23
-407
-312
-440
+19
+546
+308
+579
 number-of-photons
 number-of-photons
 0
@@ -681,6 +717,36 @@ particle-delta-e
 0
 30
 30.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+8
+383
+180
+416
+magnetic-field
+magnetic-field
+0
+100
+50.0
+1
+1
+%
+HORIZONTAL
+
+SLIDER
+11
+179
+190
+212
+magentic-field-strength
+magentic-field-strength
+0
+100
+0.0
 1
 1
 NIL
@@ -1119,7 +1185,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.1
+NetLogo 6.1.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
