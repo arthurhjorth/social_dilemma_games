@@ -58,10 +58,21 @@ to go
   ask particles [ move ]
   ask particles
   [ if collide? [check-for-collision] ] ;;if the toggle option for collision is on
-  ask photons [move]
+  ask photons [photon-move]
   ask particles [
-   let resonance-check resonance?
-    if resonance-check [set excited? true]
+    recolor
+    if not excited? [
+      let resonance-check resonance? ;;AH: this returns a list of elements: the first is a boolean that indicates whether there was resonance
+                                     ;; the second - which we only use if there was resonance - is the photon that the atom interacted with. We save this because now we
+                                     ;; want to know how much we were slowed down in the axis along which the atom moved (and direction, of course)
+      if item 0 resonance-check [
+        set excited? true
+        slow-down item 1 resonance-check ; item 1 contains the photon
+      ]
+    ]
+
+
+
   ]
   tick-advance tick-delta
   if floor ticks > floor (ticks - tick-delta)
@@ -76,38 +87,76 @@ to go
   display
 end
 
+
+to photon-move
+  if patch-ahead (speed * tick-delta) = nobody [die]
+  fd speed * tick-delta
+end
+
+to slow-down [the-photon]
+  show (word "Old speed: " speed)
+  ;; ah: this is an atom procedure and it takes a photon. It slows down, OR speeds up the atom depending on the relative angles
+  ;; of the photon and atom
+
+  ;; first we determine the speed ONLY along the axis that the photon moves, and
+  ;; whether they are moving in the same or opposite direction
+  let relative-angle heading - [heading] of the-photon
+  let same-direction? (relative-angle < 90 or relative-angle > 270)
+  let rel-same-axis-speed 0
+  let rel-other-axis-speed 0
+  if [heading] of the-photon = 0 or [heading] of the-photon = 180 [
+    set rel-same-axis-speed abs (cos heading) * speed
+    set rel-other-axis-speed abs (sin heading) * speed
+    set rel-same-axis-speed rel-same-axis-speed - 1
+    set heading atan rel-other-axis-speed rel-same-axis-speed ;; here, same axis is Y axis
+    set speed sqrt (rel-same-axis-speed ^ 2 + rel-other-axis-speed ^ 2)
+
+  ]
+  if [heading] of the-photon = 90 or [heading] of the-photon = 270[
+    set rel-same-axis-speed abs (sin heading) * speed
+    set rel-other-axis-speed abs (cos heading) * speed
+
+    set rel-same-axis-speed rel-same-axis-speed - 1
+    set heading atan rel-same-axis-speed rel-other-axis-speed ;; here, same axis is X axis
+    set speed sqrt (rel-same-axis-speed ^ 2 + rel-other-axis-speed ^ 2)
+
+  ]
+
+  show (word "New speed: " speed)
+
+end
+
 to-report magnetized-delta-e
   ;; AH: delta-e will increase the effective delta-e, so let's try somethig like this:
   report e * magnetic-field / ( distance patch 0 0) ^ 2
 end
 
 to-report resonance? ;; AH: particle procedure
-  if not any? photons-here [report false]
+  if not any? photons-here [report (list false 0) ]
   let potential-photon one-of photons-here
   ;; now we have to find out the relative speed of the photon to the particle, in order to account for dobbler effect
   let relative-angle heading - [heading] of potential-photon
-  let rel-speed abs sin relative-angle
-  ;; if relative angle is between 270 and 90 then we are moving "with" the particle and we lower the frequency
-  ;; else we increase it.
+  let rel-speed (abs cos relative-angle) * speed / 10
+  ;; if relative angle is between 270 and 90 then we are moving towards the particle and we add the frequency
+  ;; else we descrease it.
   ;; AH: using this: https://courses.lumenlearning.com/suny-osuniversityphysics/chapter/17-7-the-doppler-effect/#:~:text=Use%20the%20following%20equation%3A,due%20to%20a%20moving%20observer.
   ;; it seems that  it's really just 1 / relative speed
   ;; So:
   if relative-angle = 90 or relative-angle = 270 [ ;;AH: special case, but it would work to include it in the if below since it would just be frequcny + 0 * frequency
-    report current-delta-e = [frequency] of potential-photon
+    report (list (current-delta-e = [frequency] of potential-photon) potential-photon )
   ]
-  if relative-angle < 90 or relative-angle > 270 [ ;; moving towards
-     show (list current-delta-e round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon)))
-    report current-delta-e = round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon))
+  if relative-angle < 90 or relative-angle > 270 [ ;; moving away from
+    report (list (current-delta-e = round ([frequency] of potential-photon - (rel-speed * [frequency] of potential-photon))) potential-photon )
   ]
-  if relative-angle > 90 and  relative-angle < 270 [ ;; moving aawy from
-   report current-delta-e = round ([frequency] of potential-photon - (rel-speed * [frequency] of potential-photon))
+  if relative-angle > 90 and  relative-angle < 270 [ ;; moving towards
+    show (list current-delta-e round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon)))
+    report (list (current-delta-e = round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon))) potential-photon )
   ]
-
 end
 
 to-report current-delta-e ;; AH: this reports whatever we should calculate the delta-e for for a particle
   if magnetic-field-strength > 0 [report magnetized-delta-e]
-  report delta-e
+  report particle-delta-e
 end
 
 
@@ -358,15 +407,9 @@ end
 
 
 to recolor  ;; particle procedure
-  ifelse speed < (0.5 * 10)
-  [
-    set color blue
-  ]
-  [
-    ifelse speed > (1.5 * 10)
-      [ set color red ]
-      [ set color green ]
-  ]
+  ifelse excited? [set color red]
+  [set color blue]
+
 end
 
 
@@ -563,7 +606,7 @@ particle-delta-e
 particle-delta-e
 0
 50
-23.0
+26.0
 1
 1
 NIL
@@ -578,7 +621,7 @@ magnetic-field
 magnetic-field
 0
 100
-50.0
+0.0
 1
 1
 %
@@ -608,7 +651,7 @@ laser-frequency
 laser-frequency
 0
 100
-29.0
+13.0
 1
 1
 NIL
