@@ -59,7 +59,10 @@ to go
   ask particles
   [ if collide? [check-for-collision] ] ;;if the toggle option for collision is on
   ask photons [move]
-  ask photons [check-for-atoms] ;;@ right placement?
+  ask particles [
+   let resonance-check resonance?
+    if resonance-check [set excited? true]
+  ]
   tick-advance tick-delta
   if floor ticks > floor (ticks - tick-delta)
   [
@@ -90,49 +93,57 @@ to-report resonance? ;; AH: particle procedure
   ;; it seems that  it's really just 1 / relative speed
   ;; So:
   if relative-angle = 90 or relative-angle = 270 [ ;;AH: special case, but it would work to include it in the if below since it would just be frequcny + 0 * frequency
-    report current-delta-e = frequency
+    report current-delta-e = [frequency] of potential-photon
   ]
   if relative-angle < 90 or relative-angle > 270 [ ;; moving towards
-   report current-delta-e = frequency + (rel-speed * frequency)
+     show (list current-delta-e round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon)))
+    report current-delta-e = round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon))
   ]
   if relative-angle > 90 and  relative-angle < 270 [ ;; moving aawy from
-   report current-delta-e = frequency - (rel-speed * frequency)
+   report current-delta-e = round ([frequency] of potential-photon - (rel-speed * [frequency] of potential-photon))
   ]
 
 end
 
 to-report current-delta-e ;; AH: this reports whatever we should calculate the delta-e for for a particle
-  if magnetic-field > 0 [report magnetized-delta-e]
+  if magnetic-field-strength > 0 [report magnetized-delta-e]
   report delta-e
 end
 
 
 to make-photons ;;@make this work - define their heading!
   ; AH: nice :)
+  ask patches with [ abs pxcor <= 1 and pycor = max-pycor] [ ;;@CLUMSY NOW. Top patch
   let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
-  ask patch 0 max-pycor [ ;;@CLUMSY NOW. Top patch
     sprout-photons n [
       set color white
       set speed 10 ;;@change this speed, make a variable
       set heading 180
+      set frequency laser-frequency
   ]]
   ask patch 0 min-pycor [ ;;bottom patch ;;OR 1 to pass each other?
+  let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
     sprout-photons n [
       set color white
       set speed 10 ;;@change this speed, make a variable
       set heading 0
+      set frequency laser-frequency
   ]]
   ask patch min-pxcor 0 [ ;;left patch
+  let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
     sprout-photons n [
       set color white
       set speed 10 ;;@change this speed, make a variable
       set heading 90
+      set frequency laser-frequency
   ]]
     ask patch max-pxcor 0 [ ;;right patch ;;@OR -1 to pass each other?
+  let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
     sprout-photons n [
       set color white
       set speed 10 ;;@change this speed, make a variable
       set heading 270
+      set frequency laser-frequency
   ]]
 
 
@@ -381,8 +392,8 @@ to make-particles ;; creates initial particles
 end
 
 to setup-particle  ;; particle procedure
-  set speed init-particle-speed
-  set mass particle-mass
+  set speed 10
+  set mass 1
   set energy (0.5 * mass * speed * speed)
   set last-collision nobody
   set delta-e particle-delta-e ;;@
@@ -471,10 +482,10 @@ NIL
 1
 
 SLIDER
-18
-590
-311
-623
+14
+596
+307
+629
 number-of-particles
 number-of-particles
 1
@@ -485,141 +496,22 @@ number-of-particles
 NIL
 HORIZONTAL
 
-MONITOR
-0
-430
-119
-475
-average speed
-avg-speed
-2
-1
-11
-
-PLOT
-1089
-435
-1379
-631
-Energy Histogram
-energy
-count
-0.0
-400.0
-0.0
-10.0
-false
-true
-"set-plot-x-range 0 (0.5 * (init-particle-speed * 2) * (init-particle-speed * 2) * particle-mass)\nset-plot-y-range 0 ceiling (number-of-particles / 6)" ""
-PENS
-"fast" 10.0 1 -2674135 true "set-histogram-num-bars 40" "histogram [ energy ] of particles with [color = red]"
-"medium" 10.0 1 -10899396 true "set-histogram-num-bars 40" "histogram [ energy ] of particles with [color = green]"
-"slow" 10.0 1 -13345367 true "set-histogram-num-bars 40" "histogram [ energy ] of particles with [color = blue]"
-"avg-energy" 1.0 0 -7500403 true "" "plot-pen-reset  draw-vert-line avg-energy"
-"init-avg-energy" 1.0 0 -16777216 true "draw-vert-line init-avg-energy" ""
-
-MONITOR
-179
-433
-308
-478
-average energy
-avg-energy
-2
-1
-11
-
-PLOT
-1080
-33
-1369
-230
-Speed Counts
-ticks
-count (%)
-0.0
-100.0
-0.0
-100.0
-true
-true
-"set-plot-y-range 0 100" ""
-PENS
-"fast" 1.0 0 -2674135 true "" "plotxy ticks percent-fast"
-"medium" 1.0 0 -10899396 true "" "plotxy ticks percent-medium"
-"slow" 1.0 0 -13345367 true "" "plotxy ticks percent-slow"
-
 SWITCH
-188
-309
-291
-342
+35
+464
+138
+497
 collide?
 collide?
 1
 1
 -1000
 
-PLOT
-1086
-235
-1380
-432
-Speed Histogram
-speed
-count
-0.0
-50.0
-0.0
-100.0
-false
-true
-"set-plot-x-range 0 (init-particle-speed * 2)\nset-plot-y-range 0 ceiling (number-of-particles / 6)" ""
-PENS
-"fast" 5.0 1 -2674135 true "set-histogram-num-bars 40" "histogram [ speed ] of particles with [color = red]"
-"medium" 5.0 1 -10899396 true "set-histogram-num-bars 40" "histogram [ speed ] of particles with [color = green]"
-"slow" 5.0 1 -13345367 true "set-histogram-num-bars 40" "histogram [ speed ] of particles with [color = blue]"
-"avg-speed" 1.0 0 -7500403 true "" "plot-pen-reset   draw-vert-line avg-speed"
-"init-avg-speed" 1.0 0 -16777216 true "draw-vert-line init-avg-speed" ""
-
-MONITOR
-1
-487
-98
-532
-percent fast
-percent-fast
-0
-1
-11
-
-MONITOR
-104
-487
-207
-532
-percent medium
-percent-medium
-0
-1
-11
-
-MONITOR
-217
-487
-309
-532
-percent slow
-percent-slow
-0
-1
-11
-
 SLIDER
-6
-345
-185
-378
+2
+351
+181
+384
 box-size
 box-size
 5
@@ -628,51 +520,6 @@ box-size
 1
 1
 %
-HORIZONTAL
-
-SLIDER
-7
-262
-186
-295
-init-particle-speed
-init-particle-speed
-1
-20
-10.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-6
-303
-185
-336
-particle-mass
-particle-mass
-1
-20
-1.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-19
-546
-308
-579
-number-of-photons
-number-of-photons
-0
-100
-50.0
-1
-1
-NIL
 HORIZONTAL
 
 BUTTON
@@ -701,32 +548,32 @@ rate
 rate
 0
 100
-35.0
+6.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-718
-498
-890
-531
+12
+142
+184
+175
 particle-delta-e
 particle-delta-e
 0
-30
-30.0
+50
+23.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-8
-383
-180
-416
+4
+389
+176
+422
 magnetic-field
 magnetic-field
 0
@@ -742,11 +589,26 @@ SLIDER
 179
 190
 212
-magentic-field-strength
-magentic-field-strength
+magnetic-field-strength
+magnetic-field-strength
 0
 100
 0.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+12
+214
+184
+247
+laser-frequency
+laser-frequency
+0
+100
+29.0
 1
 1
 NIL
