@@ -7,6 +7,12 @@ globals
   avg-speed avg-energy                       ;; current averages
   fast medium slow                           ;; current counts
   percent-slow percent-medium percent-fast   ;; percentage of current counts
+  current-min-speed
+  current-max-speed
+  max-times-interacted ;;for monitor
+  all-times-interacted ;;count all interactions
+  nr-sped-up
+  nr-slowed-down
 ]
 
 breed [ particles particle ]
@@ -21,6 +27,8 @@ particles-own
   delta-e
 ;  state ;; AH: let's change this to a boolean called excited. It'll be easier to work with.
   excited?
+  my-time-excited
+  my-times-interacted
 ]
 
 photons-own [speed last-collision frequency]
@@ -31,13 +39,16 @@ to setup
   set-default-shape particles "circle"
   set-default-shape flashes "plane"
   set max-tick-delta 0.1073
-  ;; the box size is determined by the slider
-  set box-edge (round (max-pxcor * box-size / 100))
+  set box-edge (round (max-pxcor * box-size / 100))  ;; the box size is determined by the slider
   make-box
   make-particles
   update-variables
   set init-avg-speed avg-speed
   set init-avg-energy avg-energy
+
+  set nr-sped-up 0
+  set nr-slowed-down 0
+
   reset-ticks
 end
 
@@ -50,6 +61,11 @@ to update-variables ;;for plots and trackers
   set percent-fast (fast / (count particles)) * 100
   set avg-speed  mean [speed] of particles
   set avg-energy mean [energy] of particles
+
+  set current-min-speed (min [speed] of particles)
+  set current-max-speed (max [speed] of particles)
+  set max-times-interacted (max [my-times-interacted] of particles)
+  set all-times-interacted (sum  [my-times-interacted] of particles)
 end
 
 to go
@@ -68,6 +84,17 @@ to go
       if item 0 resonance-check [
         set excited? true
         slow-down item 1 resonance-check ; item 1 contains the photon
+        set my-times-interacted (my-times-interacted + 1)
+        ask item 1 resonance-check [die] ;;if there's resonance, the photon 'dies' (is absorbed)
+      ]
+    ]
+
+    if excited? [
+     set my-time-excited (my-time-excited + 1)
+
+      if my-time-excited = max-time-excited [
+       set excited? false set my-time-excited 0 ;;the atom becomes non-excited after a while (now ignoring the actual re-emission since the effect on the atom averages to 0 over time)
+
       ]
     ]
 
@@ -95,6 +122,10 @@ end
 
 to slow-down [the-photon]
   show (word "Old speed: " speed)
+
+  ;;@
+  let old-speed speed
+
   ;; ah: this is an atom procedure and it takes a photon. It slows down, OR speeds up the atom depending on the relative angles
   ;; of the photon and atom
 
@@ -124,11 +155,24 @@ to slow-down [the-photon]
 
   show (word "New speed: " speed)
 
+  ;;@
+  let new-speed speed
+
+  if new-speed > old-speed [set nr-sped-up (nr-sped-up + 1)]
+  if new-speed < old-speed [set nr-slowed-down (nr-slowed-down + 1)]
+
+
+end
+
+to-report current-delta-e ;; AH: this reports whatever we should calculate the delta-e for for a particle
+  if magnetic-field-on [report magnetized-delta-e]
+  report particle-delta-e
 end
 
 to-report magnetized-delta-e
   ;; AH: delta-e will increase the effective delta-e, so let's try somethig like this:
-  report e * magnetic-field / ( distance patch 0 0) ^ 2
+ ;; report e * magnetic-field / ( distance patch 0 0) ^ 2
+  report round (particle-delta-e * magnetic-field / (distance patch 0 0) ^ 2)
 end
 
 to-report resonance? ;; AH: particle procedure
@@ -154,15 +198,12 @@ to-report resonance? ;; AH: particle procedure
   ]
 end
 
-to-report current-delta-e ;; AH: this reports whatever we should calculate the delta-e for for a particle
-  if magnetic-field-strength > 0 [report magnetized-delta-e]
-  report particle-delta-e
-end
 
 
-to make-photons ;;@make this work - define their heading!
+
+to make-photons
   ; AH: nice :)
-  ask patches with [ abs pxcor <= 1 and pycor = max-pycor] [ ;;@CLUMSY NOW. Top patch
+  ask patches with [ abs pxcor <= 1 and pycor = max-pycor] [ ;;top patches
   let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
     sprout-photons n [
       set color white
@@ -170,31 +211,30 @@ to make-photons ;;@make this work - define their heading!
       set heading 180
       set frequency laser-frequency
   ]]
-  ask patch 0 min-pycor [ ;;bottom patch ;;OR 1 to pass each other?
-  let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
+  ask patches with [abs pxcor <= 1 and pycor = min-pycor] [ ;;bottom patches
+  let n random-poisson (rate * tick-delta)
     sprout-photons n [
       set color white
       set speed 10 ;;@change this speed, make a variable
       set heading 0
       set frequency laser-frequency
   ]]
-  ask patch min-pxcor 0 [ ;;left patch
-  let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
+  ask patches with [pxcor = min-pxcor and abs pycor <= 1] [ ;;left patches
+  let n random-poisson (rate * tick-delta)
     sprout-photons n [
       set color white
       set speed 10 ;;@change this speed, make a variable
       set heading 90
       set frequency laser-frequency
   ]]
-    ask patch max-pxcor 0 [ ;;right patch ;;@OR -1 to pass each other?
-  let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
+  ask patches with [pxcor = max-pxcor and abs pycor <= 1] [ ;;right patches
+  let n random-poisson (rate * tick-delta)
     sprout-photons n [
       set color white
       set speed 10 ;;@change this speed, make a variable
       set heading 270
       set frequency laser-frequency
   ]]
-
 
 end
 
@@ -383,35 +423,12 @@ to collide-with [ other-particle ] ;; particle procedure
     [ recolor ]
 end
 
-to check-for-atoms ;;photon procedure. interaction seen from the photon's point of view
-    if count other particles-here = 1 [ ;;@right now only works if there is exactly ONE atom on the patch
-    let candidate one-of other particles-here with [myself != last-collision] ;;they must not be the same particle that we last collided with on this patch, so that we have a chance to leave the patch
-    if (candidate != nobody) and (speed > 0 or [speed] of candidate > 0) [ ;; we also only collide if one of us has non-zero speed
-      maybe-interact-with candidate
-     ;; set last-collision candidate
-      ;;ask candidate [ set last-collision myself ]
-    ]
-  ]
-end
-
-to maybe-interact-with [atom] ;;photon procedure
-  let mass2 [mass] of atom
-  let speed2 [speed] of atom
-  let heading2 [heading] of atom
-
-
-end
-
-
-
-
 
 to recolor  ;; particle procedure
   ifelse excited? [set color red]
   [set color blue]
 
 end
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Drawing procedures;;;
@@ -441,6 +458,8 @@ to setup-particle  ;; particle procedure
   set last-collision nobody
   set delta-e particle-delta-e ;;@
   set excited? false
+  set my-times-interacted 0
+  set my-time-excited 0
 end
 
 ;; place particle at random location inside the box.
@@ -525,25 +544,25 @@ NIL
 1
 
 SLIDER
-14
-596
-307
-629
+30
+489
+323
+522
 number-of-particles
 number-of-particles
 1
 1000
-102.0
+109.0
 1
 1
 NIL
 HORIZONTAL
 
 SWITCH
-35
-464
-138
-497
+53
+410
+156
+443
 collide?
 collide?
 1
@@ -551,10 +570,10 @@ collide?
 -1000
 
 SLIDER
-2
-351
-181
-384
+12
+114
+191
+147
 box-size
 box-size
 5
@@ -583,15 +602,15 @@ NIL
 1
 
 SLIDER
-355
-495
-610
-528
+353
+489
+608
+522
 rate
 rate
 0
 100
-6.0
+27.0
 1
 1
 NIL
@@ -599,9 +618,9 @@ HORIZONTAL
 
 SLIDER
 12
-142
+155
 184
-175
+188
 particle-delta-e
 particle-delta-e
 0
@@ -613,33 +632,18 @@ NIL
 HORIZONTAL
 
 SLIDER
-4
-389
-176
-422
+22
+335
+194
+368
 magnetic-field
 magnetic-field
 0
 100
-0.0
+37.0
 1
 1
 %
-HORIZONTAL
-
-SLIDER
-11
-179
-190
-212
-magnetic-field-strength
-magnetic-field-strength
-0
-100
-0.0
-1
-1
-NIL
 HORIZONTAL
 
 SLIDER
@@ -651,11 +655,114 @@ laser-frequency
 laser-frequency
 0
 100
-13.0
+15.0
 1
 1
 NIL
 HORIZONTAL
+
+SLIDER
+862
+62
+1034
+95
+max-time-excited
+max-time-excited
+0
+500
+10.0
+10
+1
+NIL
+HORIZONTAL
+
+MONITOR
+819
+147
+938
+192
+NIL
+current-min-speed
+17
+1
+11
+
+MONITOR
+983
+147
+1114
+192
+NIL
+max-times-interacted
+17
+1
+11
+
+MONITOR
+818
+198
+937
+243
+NIL
+current-max-speed
+17
+1
+11
+
+MONITOR
+989
+197
+1108
+242
+NIL
+all-times-interacted
+17
+1
+11
+
+MONITOR
+943
+279
+1017
+324
+NIL
+nr-sped-up
+17
+1
+11
+
+MONITOR
+935
+327
+1024
+372
+NIL
+nr-slowed-down
+17
+1
+11
+
+SWITCH
+23
+292
+174
+325
+magnetic-field-on
+magnetic-field-on
+0
+1
+-1000
+
+MONITOR
+817
+250
+939
+295
+NIL
+avg-speed
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1090,7 +1197,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.0
+NetLogo 6.1.1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
