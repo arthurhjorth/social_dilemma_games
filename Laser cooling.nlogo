@@ -93,8 +93,7 @@ to go
      set my-time-excited (my-time-excited + 1)
 
       if my-time-excited = max-time-excited [
-       set excited? false set my-time-excited 0 ;;the atom becomes non-excited after a while (now ignoring the actual re-emission since the effect on the atom averages to 0 over time)
-
+       reemit-photon ;;@ADD effect on the atom of reemitting the photon? (or not? since it should average to 0)
       ]
     ]
 
@@ -114,6 +113,14 @@ to go
   display
 end
 
+to reemit-photon
+  set excited? false set my-time-excited 0 ;;the atom becomes non-excited after a while (now ignoring the actual re-emission since the effect on the atom averages to 0 over time)
+        hatch-photons 1 [
+          set color yellow
+          set speed 10 ;;@change this speed, make a variable
+          set heading random 360 ;;a nr from 0-359
+          set frequency laser-frequency]
+end
 
 to photon-move
   if patch-ahead (speed * tick-delta) = nobody [die]
