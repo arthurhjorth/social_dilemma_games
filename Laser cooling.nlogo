@@ -13,13 +13,19 @@ globals
   all-times-interacted ;;count all interactions
   nr-sped-up
   nr-slowed-down
+  last-magnetic-field ;;to check if the visualisation should be updated
+  current-magnetic-field
 
   collide?
 ]
 
 breed [ particles particle ]
 breed [photons photon]
+breed [stars star]
 breed [ flashes flash ]
+breed [emissions emission] ;;the dead photons
+emissions-own [speed]
+stars-own [lifetime] ;;
 flashes-own [birthday]
 patches-own [patch-field]
 
@@ -46,6 +52,7 @@ to setup
 ;  set box-edge (round (max-pxcor * box-size / 100))  ;; the box size is determined by the slider
   set box-edge max-pxcor
   make-box
+  set last-magnetic-field 0 set current-magnetic-field 1 ;;CLUMSY, but works. For the case if it's off to begin with - but they turn the visualisation on later
   show-magnetic-field
   make-particles
   update-variables
@@ -76,11 +83,13 @@ end
 
 to go
   make-photons
+  if current-magnetic-field != last-magnetic-field [show-magnetic-field] ;;updates the visualisation only if it has changed
   ask particles [ bounce ]
   ask particles [ move ]
   ask particles
   [ if collide? [check-for-collision] ] ;;if the toggle option for collision is on
   ask photons [photon-move]
+  ask emissions [photon-move] ;;the dead photons
   ask particles [
     recolor
     if not excited? [
@@ -89,6 +98,7 @@ to go
                                      ;; want to know how much we were slowed down in the axis along which the atom moved (and direction, of course)
       if item 0 resonance-check [
         set excited? true
+        hatch-stars 1 [set shape "star" set color 45 set size 2.5 set lifetime 0];;IBH added visualisation of where there was resonance
         slow-down item 1 resonance-check ; item 1 contains the photon
         set my-times-interacted (my-times-interacted + 1)
         ask item 1 resonance-check [die] ;;if there's resonance, the photon 'dies' (is absorbed)
@@ -116,16 +126,20 @@ to go
 
   ask flashes with [ticks - birthday > 0.4]
     [ die ]
+
+  ask stars [set lifetime (lifetime + 1)]
+  ask stars with [lifetime >= 15] [die]
+
   display
 end
 
 to reemit-photon
   set excited? false set my-time-excited 0 ;;the atom becomes non-excited after a while (now ignoring the actual re-emission since the effect on the atom averages to 0 over time)
-        hatch-photons 1 [
+        hatch-emissions 1 [ ;;IBH: made it a non-photon since even with frequency 0 it still sometimes interacted with atoms
           set color yellow
           set speed 10 ;;@change this speed, make a variable
           set heading random 360 ;;a nr from 0-359
-          set frequency 0 ;; AH: photons do not interact once they've been reemitted
+          ;;set frequency 0 ;; AH: photons do not interact once they've been reemitted
   ]
 end
 
@@ -190,19 +204,21 @@ to-report magnetized-delta-e
 end
 
 to show-magnetic-field
-  if magnetic-field-on and show-field [
+  ifelse magnetic-field-on and show-field [
     ask patches [
       if distance patch 0 0 != 0 [
         set patch-field (round (particle-delta-e * magnetic-field / (distance patch 0 0) ^ 2)) ]
     ]
     let max-field max [patch-field] of patches
     ask patches [
-      if pcolor != yellow [
+      if pcolor != yellow [ ;;so the box edges don't change color
 
         set pcolor scale-color gray patch-field 0 (ln  max-field) / 2]
 
-      ] ;;so the box edges don't change color
+      ]
+    set current-magnetic-field max-field
   ]
+  [ask patches with [pcolor != yellow] [set pcolor black]] ;;else
 end
 
 
@@ -583,7 +599,7 @@ number-of-particles
 number-of-particles
 1
 1000
-1000.0
+413.0
 1
 1
 NIL
@@ -643,7 +659,7 @@ SLIDER
 363
 magnetic-field
 magnetic-field
-0
+1
 100
 100.0
 1
@@ -660,7 +676,7 @@ laser-frequency
 laser-frequency
 0
 100
-100.0
+27.0
 1
 1
 NIL
@@ -674,9 +690,9 @@ SLIDER
 max-time-excited
 max-time-excited
 0
-500
+250
 10.0
-10
+5
 1
 NIL
 HORIZONTAL
@@ -1302,7 +1318,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.0
+NetLogo 6.1.1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
