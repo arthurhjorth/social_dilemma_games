@@ -233,7 +233,7 @@ to-report resonance? ;; AH: particle procedure
   ;; AH: using this: https://courses.lumenlearning.com/suny-osuniversityphysics/chapter/17-7-the-doppler-effect/#:~:text=Use%20the%20following%20equation%3A,due%20to%20a%20moving%20observer.
   ;; it seems that  it's really just 1 / relative speed
   ;; So:
-  if relative-angle = 90 or relative-angle = 270 [ ;;AH: special case, but it would work to include it in the if below since it would just be frequcny + 0 * frequency
+  if relative-angle = 90 or relative-angle = 270 [ ;;AH: special case, but it would work to include it in the if below since it would just be frequency + 0 * frequency
     report (list (current-delta-e = [frequency] of potential-photon) potential-photon )
   ]
   if relative-angle < 90 or relative-angle > 270 [ ;; moving away from
@@ -631,7 +631,7 @@ rate
 rate
 0
 100
-5.0
+20.0
 1
 1
 NIL
@@ -661,7 +661,7 @@ magnetic-field
 magnetic-field
 1
 100
-100.0
+1.0
 1
 1
 %
@@ -676,7 +676,7 @@ laser-frequency
 laser-frequency
 0
 100
-27.0
+20.0
 1
 1
 NIL
@@ -689,10 +689,10 @@ SLIDER
 503
 max-time-excited
 max-time-excited
-0
-250
+1
+50
 10.0
-5
+1
 1
 NIL
 HORIZONTAL
@@ -770,7 +770,7 @@ SWITCH
 328
 magnetic-field-on
 magnetic-field-on
-0
+1
 1
 -1000
 
@@ -866,10 +866,10 @@ PENS
 "default" 1.0 1 -16777216 true "" "histogram [speed] of particles"
 
 TEXTBOX
-17
-182
-167
-200
+15
+185
+165
+203
 Laser Parameters
 11
 0.0
