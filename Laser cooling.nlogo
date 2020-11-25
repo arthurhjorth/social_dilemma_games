@@ -13,6 +13,8 @@ globals
   all-times-interacted ;;count all interactions
   nr-sped-up
   nr-slowed-down
+
+  collide?
 ]
 
 breed [ particles particle ]
@@ -37,10 +39,12 @@ photons-own [speed last-collision frequency]
 
 to setup
   clear-all
+  set collide? false
   set-default-shape particles "circle"
   set-default-shape flashes "plane"
   set max-tick-delta 0.1073
-  set box-edge (round (max-pxcor * box-size / 100))  ;; the box size is determined by the slider
+;  set box-edge (round (max-pxcor * box-size / 100))  ;; the box size is determined by the slider
+  set box-edge max-pxcor
   make-box
   show-magnetic-field
   make-particles
@@ -121,7 +125,8 @@ to reemit-photon
           set color yellow
           set speed 10 ;;@change this speed, make a variable
           set heading random 360 ;;a nr from 0-359
-          set frequency laser-frequency]
+          set frequency 0 ;; AH: photons do not interact once they've been reemitted
+  ]
 end
 
 to photon-move
@@ -130,7 +135,7 @@ to photon-move
 end
 
 to slow-down [the-photon]
-  show (word "Old speed: " speed)
+;  show (word "Old speed: " speed)
 
   ;;@
   let old-speed speed
@@ -162,7 +167,7 @@ to slow-down [the-photon]
 
   ]
 
-  show (word "New speed: " speed)
+;  show (word "New speed: " speed)
 
   ;;@
   let new-speed speed
@@ -185,10 +190,19 @@ to-report magnetized-delta-e
 end
 
 to show-magnetic-field
- if magnetic-field-on and show-field [ ask patches [
-    if distance patch 0 0 != 0 [ set patch-field (round (particle-delta-e * magnetic-field / (distance patch 0 0) ^ 2)) ]
-    if pcolor != yellow [set pcolor patch-field] ;;so the box edges don't change color
-  ]]
+  if magnetic-field-on and show-field [
+    ask patches [
+      if distance patch 0 0 != 0 [
+        set patch-field (round (particle-delta-e * magnetic-field / (distance patch 0 0) ^ 2)) ]
+    ]
+    let max-field max [patch-field] of patches
+    ask patches [
+      if pcolor != yellow [
+
+        set pcolor scale-color gray patch-field 0 (ln  max-field) / 2]
+
+      ] ;;so the box edges don't change color
+  ]
 end
 
 
@@ -210,7 +224,7 @@ to-report resonance? ;; AH: particle procedure
     report (list (current-delta-e = round ([frequency] of potential-photon - (rel-speed * [frequency] of potential-photon))) potential-photon )
   ]
   if relative-angle > 90 and  relative-angle < 270 [ ;; moving towards
-    show (list current-delta-e round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon)))
+;    show (list current-delta-e round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon)))
     report (list (current-delta-e = round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon))) potential-photon )
   ]
 end
@@ -500,13 +514,13 @@ to-report last-n [n the-list]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-325
+200
 10
-779
-465
+694
+505
 -1
 -1
-5.51
+6.0
 1
 10
 1
@@ -527,10 +541,10 @@ ticks
 30.0
 
 BUTTON
-10
-73
-96
-106
+15
+150
+101
+183
 go/stop
 go
 T
@@ -544,10 +558,10 @@ NIL
 0
 
 BUTTON
-10
-40
-96
-73
+15
+117
+101
+150
 NIL
 setup
 NIL
@@ -561,51 +575,25 @@ NIL
 1
 
 SLIDER
-30
-489
-323
-522
+15
+45
+190
+78
 number-of-particles
 number-of-particles
 1
 1000
-109.0
+1000.0
 1
 1
 NIL
 HORIZONTAL
 
-SWITCH
-53
-410
-156
-443
-collide?
-collide?
-1
-1
--1000
-
-SLIDER
-12
-114
-191
-147
-box-size
-box-size
-5
-100
-100.0
-1
-1
-%
-HORIZONTAL
-
 BUTTON
-165
-36
-240
-69
+100
+150
+190
+183
 go once
 go
 NIL
@@ -619,70 +607,70 @@ NIL
 1
 
 SLIDER
-353
-489
-608
-522
+10
+240
+190
+273
 rate
 rate
 0
 100
-27.0
+5.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-12
-155
-184
-188
+15
+10
+190
+43
 particle-delta-e
 particle-delta-e
 0
 50
-26.0
+20.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-22
-335
-194
-368
+10
+330
+190
+363
 magnetic-field
 magnetic-field
 0
 100
-36.0
+100.0
 1
 1
 %
 HORIZONTAL
 
 SLIDER
-12
-214
-184
-247
+10
+204
+190
+237
 laser-frequency
 laser-frequency
 0
 100
-15.0
+100.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-862
-62
-1034
-95
+5
+470
+190
+503
 max-time-excited
 max-time-excited
 0
@@ -694,21 +682,21 @@ NIL
 HORIZONTAL
 
 MONITOR
-819
-147
-938
-192
+750
+10
+885
+55
 NIL
 current-min-speed
-17
+8
 1
 11
 
 MONITOR
-983
-147
-1114
-192
+750
+160
+885
+205
 NIL
 max-times-interacted
 17
@@ -716,10 +704,10 @@ max-times-interacted
 11
 
 MONITOR
-818
-198
-937
-243
+750
+60
+885
+105
 NIL
 current-max-speed
 17
@@ -727,10 +715,10 @@ current-max-speed
 11
 
 MONITOR
-989
-197
-1108
-242
+750
+210
+885
+255
 NIL
 all-times-interacted
 17
@@ -738,10 +726,10 @@ all-times-interacted
 11
 
 MONITOR
-943
-279
-1017
-324
+750
+260
+885
+305
 NIL
 nr-sped-up
 17
@@ -749,10 +737,10 @@ nr-sped-up
 11
 
 MONITOR
-935
-327
-1024
-372
+750
+310
+885
+355
 NIL
 nr-slowed-down
 17
@@ -760,10 +748,10 @@ nr-slowed-down
 11
 
 SWITCH
-23
-292
-174
-325
+10
+295
+190
+328
 magnetic-field-on
 magnetic-field-on
 0
@@ -771,26 +759,115 @@ magnetic-field-on
 -1000
 
 MONITOR
-817
-250
-939
-295
+750
+110
+885
+155
 NIL
 avg-speed
-17
+8
 1
 11
 
 SWITCH
-198
-292
-296
-325
+15
+80
+190
+113
 show-field
 show-field
 0
 1
 -1000
+
+BUTTON
+10
+365
+190
+398
+Show 10 slowest atoms
+ask particles [ht]\nask min-n-of 10 particles [speed] [st]
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+10
+400
+190
+433
+Show Slowest Atom
+ask turtles [ht]\nask min-one-of particles [speed] [st]
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+10
+435
+190
+468
+Show All Atoms
+ask particles [st]
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+PLOT
+705
+360
+885
+505
+Histogram of Speeds
+NIL
+NIL
+0.0
+15.0
+0.0
+50.0
+true
+false
+"" ""
+PENS
+"default" 1.0 1 -16777216 true "" "histogram [speed] of particles"
+
+TEXTBOX
+17
+182
+167
+200
+Laser Parameters
+11
+0.0
+1
+
+TEXTBOX
+14
+278
+164
+296
+Magnetic Field Parameters
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1225,7 +1302,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.1
+NetLogo 6.1.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -1242,5 +1319,5 @@ true
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
 @#$#@#$#@
-0
+1
 @#$#@#$#@
