@@ -19,6 +19,7 @@ breed [ particles particle ]
 breed [photons photon]
 breed [ flashes flash ]
 flashes-own [birthday]
+patches-own [patch-field]
 
 particles-own
 [
@@ -41,6 +42,7 @@ to setup
   set max-tick-delta 0.1073
   set box-edge (round (max-pxcor * box-size / 100))  ;; the box size is determined by the slider
   make-box
+  show-magnetic-field
   make-particles
   update-variables
   set init-avg-speed avg-speed
@@ -181,6 +183,14 @@ to-report magnetized-delta-e
  ;; report e * magnetic-field / ( distance patch 0 0) ^ 2
   report round (particle-delta-e * magnetic-field / (distance patch 0 0) ^ 2)
 end
+
+to show-magnetic-field
+ if magnetic-field-on and show-field [ ask patches [
+    if distance patch 0 0 != 0 [ set patch-field (round (particle-delta-e * magnetic-field / (distance patch 0 0) ^ 2)) ]
+    if pcolor != yellow [set pcolor patch-field] ;;so the box edges don't change color
+  ]]
+end
+
 
 to-report resonance? ;; AH: particle procedure
   if not any? photons-here [report (list false 0) ]
@@ -647,7 +657,7 @@ magnetic-field
 magnetic-field
 0
 100
-37.0
+36.0
 1
 1
 %
@@ -770,6 +780,17 @@ avg-speed
 17
 1
 11
+
+SWITCH
+198
+292
+296
+325
+show-field
+show-field
+0
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?
