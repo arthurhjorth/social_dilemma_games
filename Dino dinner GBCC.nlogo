@@ -10,7 +10,8 @@ globals
  good-patches ;;to figure out where to place the student avatars (just visual) ;;stolen from public good model
  invisibles
  greedy-list ;;storing the students who took more food this round than last round (overwritten every round)
-  all-ready? ;;to check if ready to play
+ humble-list
+ all-ready? ;;to check if ready to play
 ]
 
 breed [students student]
@@ -26,6 +27,7 @@ students-own [
   my-plan ;;how much they plan to take - overwrites if they move the take-this slider multiple times
   my-list ;;storing how much food they took each round
   greedy? ;;true if they took more fish (absolute nrs) this round than last - overwrites every round
+  humble?
 ]
 
 banners-own [banner-my-food] ;;@use this to update label
@@ -43,6 +45,7 @@ to setup
   clear-drawing
   set current-function "Play first round to update"
   set greedy-list []
+  set humble-list []
   listen-clients ;;this creates the new students
   start-over ;;resets all global and student values + updates their view ;;also sets up patches
   reset-ticks
@@ -61,7 +64,7 @@ to go ;;this just ticks away, updating the view
 
   ask banners [reposition] ;;updates the banners' labels with each client's food supply
 
-tick
+tick-advance 1 ;;this doesn't update the plots
 end
 
 to play ;;this takes the food and advances! by the press of the button!
@@ -81,9 +84,15 @@ to play ;;this takes the food and advances! by the press of the button!
 
   ask students [
       set my-list lput my-plan my-list ;;adds an element to their list with how much they took this round
-      ifelse (turn > 1) and ((last my-list) > (last (but-last my-list))) ;;if not first round, and if they took more fish this round than last round
-        [set greedy? true]
-        [set greedy? false]
+
+      ifelse length my-list > 1[  ;;if not first round (for this student)
+
+        ifelse((last my-list) > (last (but-last my-list))) ;;and if they took more fish this round than last round
+        [set greedy? true set humble? false]
+          [set greedy? false set humble? true]
+        ]
+        [set greedy? false set humble? false] ;;if first round for that student
+
 
       set color base-color
    ;;@ output-print (word "food: " my-food " , took: " my-plan) ;;to make non-anonymous: use output-show ;;USE THIS TO SHOW WHAT PEOPLE DID
@@ -99,6 +108,10 @@ to play ;;this takes the food and advances! by the press of the button!
       ifelse [greedy? = true] of one-of in-link-neighbors
         [set label-color red]
         [set label-color white]
+
+      if [humble? = true] of one-of in-link-neighbors
+        [set label-color green]
+
     ]
 
    ;;MULTIPLY THE GOODS
@@ -108,15 +121,18 @@ to play ;;this takes the food and advances! by the press of the button!
   output-print (word "There were " old-food-supply " fish.")
   output-print (word last-total-taken " fish were taken this round, leaving " (old-food-supply - last-total-taken) ".")
   output-print (word "After being multiplied by " multiplier ", now there are " food-supply " fish in total.")
-  output-print (word "These greedy players (with red labels) took more fish than they did last round: ")
 
+  output-print (word "These greedy players (with red labels) took more fish than they did last round: ") ;;THE GREEDY ONES
   set greedy-list [self] of students with [greedy? = true]
-  ifelse (students with [greedy? = true]) = nobody
+  ifelse (length greedy-list = 0)
       [output-print "Actually nobody was greedier than last time!"]
       [output-print greedy-list]
 
-  ;;hubnet-broadcast-message (word last-total-taken " candies were taken this round, leaving " old-food-supply ".") ;;ONLY WORKS FOR HUBNET, NOT BROWSER-GBCC-APP
-  ;;hubnet-broadcast-message (word "After MAGIC with the power of " multiplier ", now there are " food-supply " candies in total.")
+  output-print (word "These humble players (with green labels) took less fish than they did last round: ") ;;THE HUMBLE ONES
+  set humble-list [self] of students with [humble? = true]
+  ifelse (length humble-list = 0)
+      [output-print "Actually nobody was more humble than last time!"]
+      [output-print humble-list]
 
   ;;update the function monitor (for the students to see mathematically what happened last round)
    set current-function (word "f(x)  =  " multiplier " * (" old-food-supply " - " last-total-taken ")  =  " food-supply)
@@ -132,8 +148,11 @@ to play ;;this takes the food and advances! by the press of the button!
   ] ;;this works!!! any other things I want to update in their interface?
 
   ] ;;END OF IF-LOOP (if there is still food)
+  update-plots
   ] ;;END of if all students are ready to eat
   [output-print "Not all students are ready to eat yet!"] ;;else - if not all students are ready
+
+
 
 end
 
@@ -150,8 +169,10 @@ to start-over ;;reset global and student values
     set my-plan 0 ;;giraf?
     set my-list []
     set greedy? false
+    set humble? false
     attach-banner "Food: 0"
   ] ;;this also updates all their monitors
+  update-plots
 end
 
 to layout-patches
@@ -329,9 +350,9 @@ ticks
 
 SLIDER
 30
-60
+45
 239
-93
+78
 food-at-start
 food-at-start
 1
@@ -343,10 +364,10 @@ NIL
 HORIZONTAL
 
 MONITOR
-13
-152
-70
-197
+15
+195
+72
+240
 Turn
 turn
 17
@@ -354,10 +375,10 @@ turn
 11
 
 BUTTON
-102
-12
-165
-45
+105
+95
+168
+128
 NIL
 Go
 T
@@ -371,10 +392,10 @@ NIL
 1
 
 BUTTON
-22
-12
-86
-45
+25
+95
+89
+128
 Setup
 setup
 NIL
@@ -388,10 +409,10 @@ NIL
 1
 
 BUTTON
-184
-12
-247
-45
+187
+95
+250
+128
 NIL
 Play
 NIL
@@ -405,10 +426,10 @@ NIL
 1
 
 MONITOR
-80
-152
-160
-197
+82
+195
+162
+240
 Food supply
 food-supply
 17
@@ -416,10 +437,10 @@ food-supply
 11
 
 MONITOR
-168
-152
-256
-197
+170
+195
+258
+240
 Last food eaten
 last-total-taken
 17
@@ -427,10 +448,10 @@ last-total-taken
 11
 
 MONITOR
-168
-203
-256
-248
+170
+246
+258
+291
 All time eaten
 all-time-taken
 17
@@ -438,27 +459,27 @@ all-time-taken
 11
 
 OUTPUT
-814
-76
-1323
-258
+820
+45
+1449
+227
 11
 
 TEXTBOX
-1008
-49
-1155
-67
+1086
+24
+1233
+42
 OVERVIEW
 14
 0.0
 1
 
 SLIDER
-30
-104
-239
-137
+32
+147
+241
+180
 multiplier
 multiplier
 1
@@ -470,10 +491,10 @@ NIL
 HORIZONTAL
 
 MONITOR
-952
-321
-1164
-366
+1020
+280
+1232
+325
 Function
 current-function
 17
@@ -481,20 +502,20 @@ current-function
 11
 
 TEXTBOX
-865
-280
-1252
-331
+933
+239
+1320
+290
                                   THE  FUNCTION\nnew-food-supply = multiplier * (old-food-supply - total-taken)
 14
 0.0
 1
 
 SWITCH
-26
-214
-129
-247
+28
+257
+131
+290
 limit-on
 limit-on
 0
@@ -502,14 +523,68 @@ limit-on
 -1000
 
 TEXTBOX
-14
-252
-164
-280
+16
+295
+166
+323
 If on: students can only take 'their proportion' of the food
 11
 0.0
 1
+
+PLOT
+825
+395
+1025
+545
+Food supply
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -13345367 true "" "plot food-supply"
+
+PLOT
+1035
+395
+1235
+545
+Humble players
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"pen-1" 1.0 0 -14439633 true "" "plot length humble-list"
+
+PLOT
+1240
+395
+1440
+545
+Greedy players
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -8053223 true "" "plot length greedy-list"
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -981,5 +1056,5 @@ true
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
 @#$#@#$#@
-0
+1
 @#$#@#$#@
