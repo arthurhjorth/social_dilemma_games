@@ -9,7 +9,8 @@ globals
 
  good-patches ;;to figure out where to place the student avatars (just visual) ;;stolen from public good model
  invisibles
-
+ greedy-list ;;storing the students who took more food this round than last round (overwritten every round)
+  all-ready? ;;to check if ready to play
 ]
 
 breed [students student]
@@ -23,6 +24,8 @@ students-own [
   base-color ;;their color (when they're not signaling pink)
   my-food ;;that student's food supply
   my-plan ;;how much they plan to take - overwrites if they move the take-this slider multiple times
+  my-list ;;storing how much food they took each round
+  greedy? ;;true if they took more fish (absolute nrs) this round than last - overwrites every round
 ]
 
 banners-own [banner-my-food] ;;@use this to update label
@@ -39,6 +42,7 @@ to setup
   clear-output
   clear-drawing
   set current-function "Play first round to update"
+  set greedy-list []
   listen-clients ;;this creates the new students
   start-over ;;resets all global and student values + updates their view ;;also sets up patches
   reset-ticks
@@ -61,6 +65,9 @@ tick
 end
 
 to play ;;this takes the food and advances! by the press of the button!
+  check-if-ready ;;redundant coding?
+  ifelse all-ready? [ ;;only plays the round if all students have chosen a legitimate amount to take
+
   set last-total-taken 0 ;;reset the value from last round
   set last-total-taken (sum [my-plan] of students) ;;how much the students take in total
   set all-time-taken (all-time-taken + last-total-taken)
@@ -73,7 +80,12 @@ to play ;;this takes the food and advances! by the press of the button!
   output-print "NEW ROUND:"
 
   ask students [
-    set color base-color
+      set my-list lput my-plan my-list ;;adds an element to their list with how much they took this round
+      ifelse (turn > 1) and ((last my-list) > (last (but-last my-list))) ;;if not first round, and if they took more fish this round than last round
+        [set greedy? true]
+        [set greedy? false]
+
+      set color base-color
    ;;@ output-print (word "food: " my-food " , took: " my-plan) ;;to make non-anonymous: use output-show ;;USE THIS TO SHOW WHAT PEOPLE DID
       ;;output-show (word "Food: " my-food ". I took: " my-plan)
       if my-plan != "TOO GREEDY!" [ set my-food (my-food + my-plan)] ;;the if-statement is to get around "TOO GREEDY!"
@@ -84,6 +96,9 @@ to play ;;this takes the food and advances! by the press of the button!
    ask banners [
       set banner-my-food [my-food] of one-of in-link-neighbors ;;shows label with their food
       set label word "Food: " banner-my-food
+      ifelse [greedy? = true] of one-of in-link-neighbors
+        [set label-color red]
+        [set label-color white]
     ]
 
    ;;MULTIPLY THE GOODS
@@ -93,6 +108,13 @@ to play ;;this takes the food and advances! by the press of the button!
   output-print (word "There were " old-food-supply " fish.")
   output-print (word last-total-taken " fish were taken this round, leaving " (old-food-supply - last-total-taken) ".")
   output-print (word "After being multiplied by " multiplier ", now there are " food-supply " fish in total.")
+  output-print (word "These greedy players (with red labels) took more fish than they did last round: ")
+
+  set greedy-list [self] of students with [greedy? = true]
+  ifelse (students with [greedy? = true]) = nobody
+      [output-print "Actually nobody was greedier than last time!"]
+      [output-print greedy-list]
+
   ;;hubnet-broadcast-message (word last-total-taken " candies were taken this round, leaving " old-food-supply ".") ;;ONLY WORKS FOR HUBNET, NOT BROWSER-GBCC-APP
   ;;hubnet-broadcast-message (word "After MAGIC with the power of " multiplier ", now there are " food-supply " candies in total.")
 
@@ -110,7 +132,8 @@ to play ;;this takes the food and advances! by the press of the button!
   ] ;;this works!!! any other things I want to update in their interface?
 
   ] ;;END OF IF-LOOP (if there is still food)
-
+  ] ;;END of if all students are ready to eat
+  [output-print "Not all students are ready to eat yet!"] ;;else - if not all students are ready
 
 end
 
@@ -125,6 +148,8 @@ to start-over ;;reset global and student values
     reset-student-food
     set color base-color
     set my-plan 0 ;;giraf?
+    set my-list []
+    set greedy? false
     attach-banner "Food: 0"
   ] ;;this also updates all their monitors
 end
@@ -149,6 +174,11 @@ to reset-student-food ;;student procedure, updates their view
   hubnet-send user-id "Food supply" food-at-start ;;update their view
   hubnet-send user-id "Turn nr" turn
   hubnet-send user-id "Function" current-function ;;giraf
+end
+
+to check-if-ready
+  ifelse all? students [color = gray] ;;ie. they have made a valid plan! ;;recode this more elegantly?
+  [set all-ready? true] [set all-ready? false]
 end
 
 
@@ -223,6 +253,8 @@ to setup-student-vars ;;turtle procedure
   set label-color white
   set my-food 0
   set my-plan 0 ;;can change default
+  set my-list []
+  set greedy? false
   ;;find a good visual position:
   let my-patch one-of good-patches with [not any? students-here]
   ifelse(my-patch != nobody)
@@ -304,7 +336,7 @@ food-at-start
 food-at-start
 1
 300
-100.0
+200.0
 1
 1
 NIL
