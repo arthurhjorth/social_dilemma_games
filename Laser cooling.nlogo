@@ -9,8 +9,8 @@ globals
   percent-slow percent-medium percent-fast   ;; percentage of current counts
   current-min-speed
   current-max-speed
-  max-times-interacted ;;for monitor
-  all-times-interacted ;;count all interactions
+  max-times-resonated ;;for monitor
+  all-times-resonated ;;count all interactions
   nr-sped-up
   nr-slowed-down
   last-magnetic-field ;;to check if the visualisation should be updated
@@ -77,8 +77,8 @@ to update-variables ;;for plots and trackers
 
   set current-min-speed (min [speed] of particles)
   set current-max-speed (max [speed] of particles)
-  set max-times-interacted (max [my-times-interacted] of particles)
-  set all-times-interacted (sum  [my-times-interacted] of particles)
+  set max-times-resonated (max [my-times-interacted] of particles)
+  set all-times-resonated (sum  [my-times-interacted] of particles)
 end
 
 to go
@@ -204,7 +204,7 @@ to-report magnetized-delta-e
 end
 
 to show-magnetic-field
-  ifelse magnetic-field-on and show-field [
+  ifelse magnetic-field-on  [
     ask patches [
       if distance patch 0 0 != 0 [
         set patch-field (round (particle-delta-e * magnetic-field / (distance patch 0 0) ^ 2)) ]
@@ -676,7 +676,7 @@ laser-frequency
 laser-frequency
 0
 100
-20.0
+15.0
 1
 1
 NIL
@@ -714,7 +714,7 @@ MONITOR
 885
 205
 NIL
-max-times-interacted
+max-times-resonated
 17
 1
 11
@@ -736,7 +736,7 @@ MONITOR
 885
 255
 NIL
-all-times-interacted
+all-times-resonated
 17
 1
 11
@@ -784,17 +784,6 @@ avg-speed
 8
 1
 11
-
-SWITCH
-15
-80
-190
-113
-show-field
-show-field
-0
-1
--1000
 
 BUTTON
 10
@@ -1318,7 +1307,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.1
+NetLogo 6.1.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
