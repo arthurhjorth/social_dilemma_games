@@ -2,10 +2,21 @@ globals
 [
  turn ;;keeps track of what turn it is
  old-food-supply ;;just for output message of how it changes each round
+ old-food-supply2 ;;just for prognosis - at the END of a round (pressing play), it still holds the food supply from the end of last round
  food-supply ;;the shared food supply
+ max-take ;;each student's proportion of the food/how much they're allowed to take
  last-total-taken ;;keeping track of how much food gets taken each turn (resets each turn)
  all-time-taken ;;how much has ever been taken
  current-function ;;to display the linear function used for multiplication
+
+ update-monitors? ;;for other plots updating
+ clear-prognosis? ;;to restart the plot before each prognosis
+ current-prognosis ;;@add this
+ n ;;used for the prognosis iteration
+ last-n ;;for prognosis iterations ;;@delete? is it in use?
+ old-food-prog ;;used in prognosis
+ death-day ;;how many days until they run out of food if they continue like this! (from prognosis)
+
 
  good-patches ;;to figure out where to place the student avatars (just visual) ;;stolen from public good model
  invisibles
@@ -21,7 +32,8 @@ breed [banners banner] ;;dummy turtles for the students' labels (to change their
 breed [standins standin]
 
 students-own [
-  user-id ;;the client name
+  user-id ;;the client name (
+  my-name ;;the turtle 'self' name used for display
   base-color ;;their color (when they're not signaling pink)
   my-food ;;that student's food supply
   my-plan ;;how much they plan to take - overwrites if they move the take-this slider multiple times
@@ -43,7 +55,7 @@ to setup
   clear-all-plots
   clear-output
   clear-drawing
-  set current-function "Play first round to update"
+  set current-function "Play first round to update" set current-prognosis "None yet"
   set greedy-list []
   set humble-list []
   listen-clients ;;this creates the new students
@@ -67,6 +79,7 @@ to go ;;this just ticks away, updating the view
 tick-advance 1 ;;this doesn't update the plots
 end
 
+
 to play ;;this takes the food and advances! by the press of the button!
   check-if-ready ;;redundant coding?
   ifelse all-ready? [ ;;only plays the round if all students have chosen a legitimate amount to take
@@ -80,7 +93,7 @@ to play ;;this takes the food and advances! by the press of the button!
   [
   set turn (turn + 1)
 
-  output-print "NEW ROUND:"
+  output-print "" output-print "NEW ROUND:"
 
   ask students [
       set my-list lput my-plan my-list ;;adds an element to their list with how much they took this round
@@ -115,8 +128,7 @@ to play ;;this takes the food and advances! by the press of the button!
     ]
 
    ;;MULTIPLY THE GOODS
-
-  set food-supply (multiplier * food-supply) ;;could change this multiplier, or maybe make a more complicated formula? Or add randomness?
+  set food-supply floor (multiplier * food-supply) ;;floor rounds down to nearest integer) ;;could maybe make a more complicated formula? Or add randomness?
 
   output-print (word "There were " old-food-supply " fish.")
   output-print (word last-total-taken " fish were taken this round, leaving " (old-food-supply - last-total-taken) ".")
@@ -136,8 +148,13 @@ to play ;;this takes the food and advances! by the press of the button!
 
   ;;update the function monitor (for the students to see mathematically what happened last round)
    set current-function (word "f(x)  =  " multiplier " * (" old-food-supply " - " last-total-taken ")  =  " food-supply)
+   ;;@ set current-prognosis
 
-    set old-food-supply food-supply
+
+    set old-food-supply2 old-food-supply ;;old-food-supply2 is used for prognosis! (at the end of play, it actually holds the initial/last round's food supply ;;@clumsy...
+    set old-food-supply food-supply ;;puts the current food supply as the old food supply
+
+    if count students > 0 [set max-take floor (food-supply / count students)] ;;the new proportion/max grab for everyone
 
   ask students [ ;;update the values on the clients' interfaces ;;@COULD SEND THEM MORE INFO ABOUT THE BEHAVIOR OF THE OTHERS?
     hubnet-send user-id "My food" my-food
@@ -145,23 +162,28 @@ to play ;;this takes the food and advances! by the press of the button!
     hubnet-send user-id "Food supply" food-supply
     hubnet-send user-id "My plan" my-plan
     hubnet-send user-id "Function" current-function
+    hubnet-send user-id "Max take" max-take
   ] ;;this works!!! any other things I want to update in their interface?
 
   ] ;;END OF IF-LOOP (if there is still food)
   update-plots
   ] ;;END of if all students are ready to eat
   [output-print "Not all students are ready to eat yet!"] ;;else - if not all students are ready
-
-
-
 end
 
 to start-over ;;reset global and student values
   set turn 0
+
+  set n 0 ;;for the prognosis iteration
+  set last-n 0
+  set update-monitors? true ;;so we only say when we DON'T want them to update
+
   set last-total-taken 0
   set all-time-taken 0
   set food-supply food-at-start
+  if count students > 0 [set max-take floor (food-supply / count students)]
   set old-food-supply food-supply
+  set old-food-prog food-supply ;;for the prognosis and plot
   layout-patches ;;for where to place students visually + the middle food patch
   ask students [
     reset-student-food
@@ -195,11 +217,49 @@ to reset-student-food ;;student procedure, updates their view
   hubnet-send user-id "Food supply" food-at-start ;;update their view
   hubnet-send user-id "Turn nr" turn
   hubnet-send user-id "Function" current-function ;;giraf
+  hubnet-send user-id "Max take" max-take
 end
 
 to check-if-ready
   ifelse all? students [color = gray] ;;ie. they have made a valid plan! ;;recode this more elegantly?
   [set all-ready? true] [set all-ready? false]
+end
+
+
+;;@ Ida working on this
+to run-prognosis ;;prognosis for future food supply if multiplier and total-taken stay the same
+  if n = 0 [
+    print "prognosis time!"
+    set clear-prognosis? true
+    set update-monitors? false ;;so the other plots don't update!!!
+    update-plots ;;just clears the prognosis plot
+    set clear-prognosis? false ;;ready to plot the prognosis
+    set old-food-prog old-food-supply2 ;;so the value is kept save in old-food-supply2, just in case the prognosis is run again on the same round
+  ]
+  let new-food-prog floor (multiplier * (old-food-prog - last-total-taken)) ;;floor rounds down, just as in the game ;;@PROBLEM?!
+
+  set old-food-prog new-food-prog ;;for plotting! put f(x) in x's place for next iteration
+
+  print old-food-prog
+
+  update-plots ;;@ HOW DO I UPDATE ONLY THE PROGNOSIS PLOT?! updated with old-food-prog!
+
+  set last-n n ;;for the plot update condition, updates if n != last-n ;;@make this work???
+  set n (n + 1) ;;(i.e. plot updates every iteration at this point!)
+
+  if n = 50 or old-food-prog <= 0 [ ;;if we run out of food or if we're still looking good in n days
+    ifelse old-food-prog <= 0
+       [set death-day n] ;;when they will run out of food
+       [set death-day "sustainable!"]
+
+    set n 0 set last-n 0
+    set old-food-prog old-food-supply2 ;;back to the value in this round, if they want to run the prognosis again
+    print "prognosis done! : -)"
+    set update-monitors? true ;;other plots back to being allowed to update
+    stop
+    ;;if new-food-prog <= 0 [stop]
+  ]
+
 end
 
 
@@ -233,13 +293,11 @@ to execute-command [command]
     ask students with [user-id = hubnet-message-source] ;;the student who took this amount
     [
       ifelse limit-on = TRUE [
-        ifelse hubnet-message <= food-supply / count students
+        ifelse hubnet-message <= max-take ;;the proportion students can maximally take
         [set my-plan hubnet-message] ;;what they plan to take - if it's not too greedy!
         [set my-plan "TOO GREEDY!"]
       ] ;;if limit on end bracket
       [set my-plan hubnet-message] ;;if limit-on is FALSE
-
-
 
     ]
   ]
@@ -267,6 +325,7 @@ end
 
 to setup-student-vars ;;turtle procedure
   set user-id hubnet-message-source
+  set my-name word self "" ;;makes it into a string
   set shape "person"
   set size 1.5
   set base-color one-of [14 17 24 27 45 54 66 75 85 95 104 114 117 124 127 134 137 9.9]
@@ -284,8 +343,6 @@ to setup-student-vars ;;turtle procedure
 
   ;;attach the dummy breed for better label positioning:
   attach-banner "Food: 0" ;;clumsy coding right now - manually string sets it to 0 until my-food is updated in 'to play'
-
-  ;;@display-labels ;;maybe add this as a toggle option
 end
 
 to attach-banner [x]
@@ -312,13 +369,15 @@ to reposition ;;banner procedure
   [die] ;;if their neighbor/client has left
 end
 
-
-
 to send-info-to-clients ;;turtle procedure
   hubnet-send user-id "My food" my-food
   hubnet-send user-id "Food supply" food-supply
   hubnet-send user-id "Turn nr" turn
   hubnet-send user-id "Function" current-function
+  hubnet-send user-id "Me" my-name
+  hubnet-send user-id "Max take" max-take
+  ;;if limit-on?
+  ;;food-supply / count students ;;allowed to take this
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -349,25 +408,25 @@ ticks
 30.0
 
 SLIDER
-30
-45
-239
-78
+20
+20
+235
+53
 food-at-start
 food-at-start
 1
 300
-200.0
+104.0
 1
 1
 NIL
 HORIZONTAL
 
 MONITOR
-15
-195
-72
-240
+11
+155
+68
+200
 Turn
 turn
 17
@@ -375,10 +434,10 @@ turn
 11
 
 BUTTON
-105
-95
-168
-128
+96
+60
+159
+93
 NIL
 Go
 T
@@ -392,10 +451,10 @@ NIL
 1
 
 BUTTON
-25
+31
+60
 95
-89
-128
+93
 Setup
 setup
 NIL
@@ -409,10 +468,10 @@ NIL
 1
 
 BUTTON
-187
-95
-250
-128
+161
+60
+224
+93
 NIL
 Play
 NIL
@@ -426,10 +485,10 @@ NIL
 1
 
 MONITOR
-82
-195
-162
-240
+78
+155
+158
+200
 Food supply
 food-supply
 17
@@ -437,10 +496,10 @@ food-supply
 11
 
 MONITOR
-170
-195
-258
-240
+166
+155
+254
+200
 Last food eaten
 last-total-taken
 17
@@ -448,10 +507,10 @@ last-total-taken
 11
 
 MONITOR
-170
-246
-258
-291
+166
+206
+254
+251
 All time eaten
 all-time-taken
 17
@@ -476,16 +535,16 @@ OVERVIEW
 1
 
 SLIDER
-32
-147
-241
-180
+21
+100
+230
+133
 multiplier
 multiplier
 1
 5
-1.0
-1
+1.1
+.1
 1
 NIL
 HORIZONTAL
@@ -512,10 +571,10 @@ TEXTBOX
 1
 
 SWITCH
-28
-257
-131
-290
+24
+217
+127
+250
 limit-on
 limit-on
 0
@@ -523,10 +582,10 @@ limit-on
 -1000
 
 TEXTBOX
-16
-295
-166
-323
+12
+255
+162
+283
 If on: students can only take 'their proportion' of the food
 11
 0.0
@@ -538,15 +597,15 @@ PLOT
 1025
 545
 Food supply
-NIL
-NIL
+Time
+Food
 0.0
 10.0
 0.0
 10.0
 true
 false
-"" ""
+"" "if update-monitors? = false [stop]"
 PENS
 "default" 1.0 0 -13345367 true "" "plot food-supply"
 
@@ -556,15 +615,15 @@ PLOT
 1235
 545
 Humble players
-NIL
-NIL
+Time
+Count
 0.0
 10.0
 0.0
 10.0
 true
 false
-"" ""
+"" "if update-monitors? = false [stop]"
 PENS
 "pen-1" 1.0 0 -14439633 true "" "plot length humble-list"
 
@@ -574,17 +633,97 @@ PLOT
 1440
 545
 Greedy players
-NIL
-NIL
+Time
+Count
 0.0
 10.0
 0.0
 10.0
 true
 false
-"" ""
+"" "if update-monitors? = false [stop]"
 PENS
 "default" 1.0 0 -8053223 true "" "plot length greedy-list"
+
+MONITOR
+5
+290
+175
+335
+NIL
+current-prognosis
+17
+1
+11
+
+BUTTON
+85
+340
+192
+373
+NIL
+run-prognosis\n
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+PLOT
+25
+375
+250
+535
+50-turn prognosis
+Time
+Food
+0.0
+50.0
+0.0
+10.0
+true
+false
+"" "if clear-prognosis? = true [clear-plot]"
+PENS
+"food" 1.0 0 -955883 true "" "plot old-food-prog"
+"zero" 1.0 0 -10873583 true "" "plot 0"
+
+MONITOR
+180
+290
+255
+335
+NIL
+death-day
+17
+1
+11
+
+MONITOR
+860
+330
+962
+375
+NIL
+clear-prognosis?
+17
+1
+11
+
+MONITOR
+1015
+335
+1122
+380
+NIL
+update-monitors?
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1005,7 +1144,7 @@ NIL
 TEXTBOX
 756
 133
-1146
+1186
 177
                                   THE  FUNCTION\nnew-food-supply = multiplier * (old-food-supply - total-taken)
 14
@@ -1043,6 +1182,26 @@ VIEW
 16
 -16
 16
+
+MONITOR
+40
+10
+160
+59
+Me
+NIL
+3
+1
+
+MONITOR
+45
+310
+107
+359
+Max take
+NIL
+0
+1
 
 @#$#@#$#@
 default
