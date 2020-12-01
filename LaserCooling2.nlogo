@@ -16,6 +16,10 @@ globals
   last-magnetic-field ;;to check if the visualisation should be updated
   current-magnetic-field
 
+  temp-list
+  avg-temp
+  counter ;;for calculating rolling average for the temperature plot
+
   collide?
 ]
 
@@ -61,6 +65,9 @@ to setup
 
   set nr-sped-up 0
   set nr-slowed-down 0
+
+  set counter 0 ;;for rolling average temperature plot
+  set temp-list n-values average-over [0] ;;@averaging over ? temperature readings
 
   reset-ticks
 end
@@ -127,11 +134,24 @@ to go
   ask flashes with [ticks - birthday > 0.4]
     [ die ]
 
+  calculate-avg-temp
+
   ask stars [set lifetime (lifetime + 1)]
   ask stars with [lifetime >= 15] [die]
 
   display
 end
+
+to calculate-avg-temp
+  set temp-list replace-item counter temp-list (round (sum [energy] of flashes)) ;;replaces the next item in the rolling average list with the current 'temperature'
+  if reduce * temp-list != 0 [set avg-temp mean temp-list] ;;only updates avg-temp once five readings have been made
+  ifelse counter < average-over - 1 [set counter counter + 1] [set counter 0] ;;loops through so we always update the oldest temperature reading (-1 since first item is 0)
+end
+
+to test-stuff
+  print temp-list
+end
+
 
 to reemit-photon
   set excited? false set my-time-excited 0 ;;the atom becomes non-excited after a while (now ignoring the actual re-emission since the effect on the atom averages to 0 over time)
@@ -253,15 +273,15 @@ to make-photons
   ask patches with [ abs pxcor <= 4 and pycor = max-pycor] [ ;;top patches
   let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
     sprout-photons n [
-      set color white
-      set speed 10 ;;@change this speed, make a variable
+      set color scale-color red laser-frequency 0 100
+      set speed 10 ;;@change photon speed?
       set heading 180
       set frequency laser-frequency
   ]]
   ask patches with [abs pxcor <= 4 and pycor = min-pycor] [ ;;bottom patches
   let n random-poisson (rate * tick-delta)
     sprout-photons n [
-      set color white
+      set color scale-color red laser-frequency 0 100
       set speed 10 ;;@change this speed, make a variable
       set heading 0
       set frequency laser-frequency
@@ -269,7 +289,7 @@ to make-photons
   ask patches with [pxcor = min-pxcor and abs pycor <= 4] [ ;;left patches
   let n random-poisson (rate * tick-delta)
     sprout-photons n [
-      set color white
+      set color scale-color red laser-frequency 0 100
       set speed 10 ;;@change this speed, make a variable
       set heading 90
       set frequency laser-frequency
@@ -277,15 +297,13 @@ to make-photons
   ask patches with [pxcor = max-pxcor and abs pycor <= 4] [ ;;right patches
   let n random-poisson (rate * tick-delta)
     sprout-photons n [
-      set color white
+      set color scale-color red laser-frequency 0 100
       set speed 10 ;;@change this speed, make a variable
       set heading 270
       set frequency laser-frequency
   ]]
 
 end
-
-
 
 to calculate-tick-delta
   ;; tick-delta is calculated in such way that even the fastest
@@ -319,7 +337,7 @@ to bounce  ;; particle procedure
 
   ask patch new-px new-py
   [ sprout-flashes 1 [
-    set energy my-speed
+    set energy my-speed ;;@should we round this? for temperature calculations
       set color pcolor - 2
       set birthday ticks
       set heading 0
@@ -474,9 +492,18 @@ to collide-with [ other-particle ] ;; particle procedure
 end
 
 
-to recolor  ;; particle procedure
-  ifelse excited? [set color red]
-  [set color blue]
+to recolor ;;particle procedure
+  ifelse speed < (4) ;;@consider changing these thresholds
+  [
+    set color blue
+  ]
+  [
+    ifelse speed > (9)
+      [ set color red ]
+      [ set color green ]
+  ]
+
+  ;;ifelse excited? [set color red] [set color blue] ;;@to color by excitement
 
 end
 
@@ -502,7 +529,7 @@ to make-particles ;; creates initial particles
 end
 
 to setup-particle  ;; particle procedure
-  set speed 10
+  set speed round random-normal speed-mean speed-sd ;;mean and sd can be set ;;@change to a more accurate distribution than normal?
   set mass 1
   set energy (0.5 * mass * speed * speed)
   set last-collision nobody
@@ -602,7 +629,7 @@ number-of-particles
 number-of-particles
 1
 1000
-375.0
+501.0
 1
 1
 NIL
@@ -634,7 +661,7 @@ rate
 rate
 0
 100
-27.0
+22.0
 1
 1
 NIL
@@ -664,7 +691,7 @@ magnetic-field
 magnetic-field
 1
 100
-64.0
+100.0
 1
 1
 %
@@ -679,7 +706,7 @@ laser-frequency
 laser-frequency
 0
 100
-85.0
+90.0
 1
 1
 NIL
@@ -811,7 +838,7 @@ BUTTON
 190
 433
 Show Slowest Atom
-ask turtles [ht]\nask min-one-of particles [speed] [st]
+ask particles [ht]\nask min-one-of particles [speed] [st]
 NIL
 1
 T
@@ -893,7 +920,82 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot sum [energy] of flashes"
+"default" 1.0 0 -16777216 true "" "if avg-temp != 0[plot avg-temp]"
+
+SLIDER
+890
+365
+1062
+398
+speed-mean
+speed-mean
+1
+20
+9.0
+.5
+1
+NIL
+HORIZONTAL
+
+SLIDER
+890
+405
+1062
+438
+speed-sd
+speed-sd
+0
+10
+1.0
+.5
+1
+NIL
+HORIZONTAL
+
+PLOT
+915
+210
+1115
+360
+Speed counts
+ticks
+count (%)
+0.0
+10.0
+0.0
+100.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -2674135 true "" "plotxy ticks percent-fast"
+"pen-1" 1.0 0 -10899396 true "" "plotxy ticks percent-medium"
+"pen-2" 1.0 0 -13345367 true "" "plotxy ticks percent-slow"
+
+SLIDER
+1165
+70
+1370
+103
+average-over
+average-over
+5
+100
+50.0
+5
+1
+NIL
+HORIZONTAL
+
+TEXTBOX
+1185
+50
+1380
+76
+SET THIS BEFORE SETUP (testing)
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
