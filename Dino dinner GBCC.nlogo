@@ -22,6 +22,8 @@ globals
  invisibles
  greedy-list ;;storing the students who took more food this round than last round (overwritten every round)
  humble-list
+ greedy-list-%
+ humble-list-%
  all-ready? ;;to check if ready to play
 ]
 
@@ -37,9 +39,13 @@ students-own [
   base-color ;;their color (when they're not signaling pink)
   my-food ;;that student's food supply
   my-plan ;;how much they plan to take - overwrites if they move the take-this slider multiple times
+  my-plan-% ;;how much they plan to take translated into percent
   my-list ;;storing how much food they took each round
+  my-list-% ;;storing how big a percentage of the available food they took each round
   greedy? ;;true if they took more fish (absolute nrs) this round than last - overwrites every round
+  greedy-%?
   humble?
+  humble-%?
 ]
 
 banners-own [banner-my-food] ;;@use this to update label
@@ -58,6 +64,8 @@ to setup
   set current-function "Play first round to update" set current-prognosis "None yet"
   set greedy-list []
   set humble-list []
+  set greedy-list-% []
+  set humble-list-% []
   listen-clients ;;this creates the new students
   start-over ;;resets all global and student values + updates their view ;;also sets up patches
   reset-ticks
@@ -96,7 +104,9 @@ to play ;;this takes the food and advances! by the press of the button!
   output-print "" output-print "NEW ROUND:"
 
   ask students [
-      set my-list lput my-plan my-list ;;adds an element to their list with how much they took this round
+      set my-list lput my-plan my-list ;;@adds an element to their list with how much they took this round
+      set my-list-% lput my-plan-% my-list-%
+
 
       ifelse length my-list > 1[  ;;if not first round (for this student)
 
@@ -105,6 +115,15 @@ to play ;;this takes the food and advances! by the press of the button!
           [set greedy? false set humble? true]
         ]
         [set greedy? false set humble? false] ;;if first round for that student
+
+       ;;@^^add the same for if they were percentage-greedy/humble (my-plan-% and my-list-%
+       ifelse length my-list-% > 1[  ;;if not first round (for this student)
+        ifelse((last my-list-%) > (last (but-last my-list-%))) ;;and if they took more fish this round than last round
+        [set greedy-%? true set humble-%? false]
+          [set greedy-%? false set humble-%? true]
+        ]
+        [set greedy? false set humble? false] ;;if first round for that student
+
 
 
       set color base-color
@@ -134,17 +153,23 @@ to play ;;this takes the food and advances! by the press of the button!
   output-print (word last-total-taken " fish were taken this round, leaving " (old-food-supply - last-total-taken) ".")
   output-print (word "After being multiplied by " multiplier ", now there are " food-supply " fish in total.")
 
-  output-print (word "These greedy players (with red labels) took more fish than they did last round: ") ;;THE GREEDY ONES
+  ;;THE GREEDY ONES
   set greedy-list [self] of students with [greedy? = true]
   ifelse (length greedy-list = 0)
-      [output-print "Actually nobody was greedier than last time!"]
-      [output-print greedy-list]
+      [output-print "Nobody was greedier and took more fish than they did last round!"]
+      [output-print (word "These greedy players (with red labels) took more fish than they did last round: ") output-print greedy-list]
 
-  output-print (word "These humble players (with green labels) took less fish than they did last round: ") ;;THE HUMBLE ONES
+  set greedy-list-% [self] of students with [greedy-%? = true]
+
+  ;;THE HUMBLE ONES
   set humble-list [self] of students with [humble? = true]
   ifelse (length humble-list = 0)
-      [output-print "Actually nobody was more humble than last time!"]
-      [output-print humble-list]
+      [output-print "Nobody was more humble and took less fish than they did last round!"]
+      [output-print (word "These humble players (with green labels) took less fish than they did last round: ") output-print humble-list]
+
+  set humble-list-% [self] of students with [humble-%? = true]
+
+
 
   ;;update the function monitor (for the students to see mathematically what happened last round)
    set current-function (word "f(x)  =  " multiplier " * (" old-food-supply " - " last-total-taken ")  =  " food-supply)
@@ -161,12 +186,15 @@ to play ;;this takes the food and advances! by the press of the button!
     hubnet-send user-id "Turn nr" turn
     hubnet-send user-id "Food supply" food-supply
     hubnet-send user-id "My plan" my-plan
+    hubnet-send user-id "Taking %" my-plan-%
     hubnet-send user-id "Function" current-function
     hubnet-send user-id "Max take" max-take
   ] ;;this works!!! any other things I want to update in their interface?
 
   ] ;;END OF IF-LOOP (if there is still food)
+  set clear-prognosis? true
   update-plots
+
   ] ;;END of if all students are ready to eat
   [output-print "Not all students are ready to eat yet!"] ;;else - if not all students are ready
 end
@@ -188,8 +216,8 @@ to start-over ;;reset global and student values
   ask students [
     reset-student-food
     set color base-color
-    set my-plan 0 ;;giraf?
-    set my-list []
+    set my-plan 0 set my-plan-% 0 ;;@?
+    set my-list [] set my-list-% []
     set greedy? false
     set humble? false
     attach-banner "Food: 0"
@@ -229,7 +257,7 @@ end
 ;;@ Ida working on this
 to run-prognosis ;;prognosis for future food supply if multiplier and total-taken stay the same
   if n = 0 [
-    print "prognosis time!"
+    output-print "" output-print "PROGNOSIS:"
     set clear-prognosis? true
     set update-monitors? false ;;so the other plots don't update!!!
     update-plots ;;just clears the prognosis plot
@@ -240,9 +268,9 @@ to run-prognosis ;;prognosis for future food supply if multiplier and total-take
 
   set old-food-prog new-food-prog ;;for plotting! put f(x) in x's place for next iteration
 
-  print old-food-prog
+  output-print (word "Round " n ": " old-food-prog " fish") ;;@REMOVE FROM OVERVIEW?
 
-  update-plots ;;@ HOW DO I UPDATE ONLY THE PROGNOSIS PLOT?! updated with old-food-prog!
+  update-plots ;;HOW DO I UPDATE ONLY THE PROGNOSIS PLOT?! @fixed! updated with old-food-prog!
 
   set last-n n ;;for the plot update condition, updates if n != last-n ;;@make this work???
   set n (n + 1) ;;(i.e. plot updates every iteration at this point!)
@@ -250,11 +278,16 @@ to run-prognosis ;;prognosis for future food supply if multiplier and total-take
   if n = 50 or old-food-prog <= 0 [ ;;if we run out of food or if we're still looking good in n days
     ifelse old-food-prog <= 0
        [set death-day n] ;;when they will run out of food
-       [set death-day "sustainable!"]
+       [set death-day "Sustainable"]
+
+    ;;FOR THE OVERVIEW SUM-UP
+    ifelse death-day = "Sustainable"
+      [output-print "SUSTAINABLE! :-)" output-print (word "If you continue taking " (last-total-taken) " fish in total every round, you will have " old-food-prog " fish in 50 rounds.")]
+      [output-print "UNSUSTAINABLE! :-(" output-print (word "If you continue taking " (last-total-taken) " fish every round, you will run out of fish in " death-day " rounds.")]
+
 
     set n 0 set last-n 0
     set old-food-prog old-food-supply2 ;;back to the value in this round, if they want to run the prognosis again
-    print "prognosis done! : -)"
     set update-monitors? true ;;other plots back to being allowed to update
     stop
     ;;if new-food-prog <= 0 [stop]
@@ -294,7 +327,9 @@ to execute-command [command]
     [
       ifelse limit-on = TRUE [
         ifelse hubnet-message <= max-take ;;the proportion students can maximally take
-        [set my-plan hubnet-message] ;;what they plan to take - if it's not too greedy!
+        [set my-plan hubnet-message ;;what they plan to take - if it's not too greedy!
+         set my-plan-% precision ((my-plan / food-supply) * 100) 2 ;;the percentage with 2 decimal places
+        ]
         [set my-plan "TOO GREEDY!"]
       ] ;;if limit on end bracket
       [set my-plan hubnet-message] ;;if limit-on is FALSE
@@ -310,6 +345,7 @@ to execute-command [command]
         if my-plan != "TOO GREEDY!" and my-plan >= 0 [ ;;to make sure they didn't just click ready but didn't move the slider so my-plan didn't update ;;@could instead save old my-plan?
           set color gray ] ;;means they have decided
         hubnet-send user-id "My plan" my-plan ;;de kan se deres nuværende plan. først når der trykkes play, opdateres deres mad
+        hubnet-send user-id "Taking %" my-plan-%
         ;;@set my-final-plan my-plan ;;is this clumsy programming? - make sure this change makes it automatically advance in 'play'?
     ]
   ]
@@ -334,6 +370,7 @@ to setup-student-vars ;;turtle procedure
   set my-food 0
   set my-plan 0 ;;can change default
   set my-list []
+  set my-list-% []
   set greedy? false
   ;;find a good visual position:
   let my-patch one-of good-patches with [not any? students-here]
@@ -518,17 +555,17 @@ all-time-taken
 11
 
 OUTPUT
-820
+815
 45
-1449
+1485
 227
 11
 
 TEXTBOX
-1086
-24
-1233
-42
+1110
+25
+1257
+43
 OVERVIEW
 14
 0.0
@@ -592,9 +629,9 @@ If on: students can only take 'their proportion' of the food
 1
 
 PLOT
-825
+815
 395
-1025
+1015
 545
 Food supply
 Time
@@ -610,9 +647,9 @@ PENS
 "default" 1.0 0 -13345367 true "" "plot food-supply"
 
 PLOT
-1035
+1025
 395
-1235
+1225
 545
 Humble players
 Time
@@ -628,9 +665,9 @@ PENS
 "pen-1" 1.0 0 -14439633 true "" "plot length humble-list"
 
 PLOT
-1240
+1230
 395
-1440
+1430
 545
 Greedy players
 Time
@@ -699,28 +736,6 @@ MONITOR
 335
 NIL
 death-day
-17
-1
-11
-
-MONITOR
-860
-330
-962
-375
-NIL
-clear-prognosis?
-17
-1
-11
-
-MONITOR
-1015
-335
-1122
-380
-NIL
-update-monitors?
 17
 1
 11
@@ -1073,10 +1088,10 @@ NetLogo 6.1.1
 @#$#@#$#@
 @#$#@#$#@
 MONITOR
-20
-67
-84
-116
+110
+220
+174
+269
 My food
 NIL
 3
@@ -1098,30 +1113,30 @@ NIL
 HORIZONTAL
 
 MONITOR
-27
-213
-107
-262
+25
+220
+105
+269
 Food supply
 NIL
 3
 1
 
 MONITOR
-116
-214
-173
-263
+75
+280
+132
+329
 Turn nr
 NIL
 3
 1
 
 MONITOR
-99
-67
-185
-116
+90
+65
+176
+114
 My plan
 NIL
 3
@@ -1184,23 +1199,33 @@ VIEW
 16
 
 MONITOR
-40
-10
-160
-59
+45
+340
+165
+389
 Me
 NIL
 3
 1
 
 MONITOR
-45
-310
-107
-359
+60
+10
+122
+59
 Max take
 NIL
 0
+1
+
+MONITOR
+25
+65
+87
+114
+Taking %
+NIL
+3
 1
 
 @#$#@#$#@
