@@ -1,96 +1,176 @@
 globals [
   action ;;last button pressed. left = 1, right = 2
-  object-x
-  time-left ;;@?
+  object-x ;;the object's current position
+  object-y
+  push-force
+  global-speed ;;for plotting @?
+  global-d-speed
+  win? ;;to see if they've won
+  score
+  last-score ;;for coding purposes, keeping track of the previous score (to see if it's changed)
+  season
 ]
 
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
 breed [objects object]
 breed [players player]
+breed [graphics graphic]
 
 players-own [
-  time
-  speed ;;problably don't need these two? from the frogger model
+  force
 ]
 
 objects-own [
+  speed
+  old-speed
+  d-speed
   mass
-  friction
+  object-friction
   points
 ]
 
-;;;;;;;;;;;;;;;;;;;;;;;;;
-;;KRÆFTER OG BEVÆGELSE;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;
+graphics-own [lifetime]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;KRÆFTER OG BEVÆGELSE;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+to startup
+  setup
+end
 
 to setup
   clear-all
+  set season "summer" ;;default season
   make-world
-  object-sheep
+  make-object ;;the one that's chosen
   reset-ticks
 end
 
 to go
-  ;;if exhausted? [stop]
-  set object-x [xcor] of one-of objects
+  if count objects > 0 [
+    set object-x [xcor] of one-of objects
+    set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
   move
-end
-
-to make-world
-  ask patches [ ;;sky and grass
-    ifelse pycor > -2 or (pxcor > 15 and pycor > -19)  [set pcolor sky] [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ]
-  ]
-
-   create-houses 1 [ ;;the house
-    set shape "house"
-    set color 24
-    set size 3
-    setxy 14 0
-  ]
-
-  create-players 1 [ ;;the player
-    set shape "person"
-    set color black
-    set size 3
-    setxy -19 0
-  ]
+  accelerate-object
+  check-win
+  update-graphics
+  every 1 [tick] ;;@change the speed of the model?
 end
 
 to move
   move-person
-  every 0.1
-    [ask players [decrement-time]]
-
-  check-object ;;to see if they've failed
+  every 0.5
+    [check-object] ;;to see if they've failed
 end
 
 
-to decrement-time ;;@use this?
-  set time-left precision (time-left - 0.1) 1 ;;only for the person
+;;accelerationsvektor (+ hvis spilleren skubber) m/s^2
+;;fartvektor
+;;hvert tick: læg acc-vek til fart-vek, bevæg spilleren (objektet) ift bevægelsesvektoren
+
+to accelerate-object
+  ask objects [
+    ;;calculate the acceleration vector (d-speed)
+
+print word "push-force: " push-force
+    ;; + skubbekraften
+   set d-speed d-speed + push-force ;;positive if right, negative if left
+
+    set global-d-speed d-speed
+
+    ;; - resistance @(what sort of resistance is this?) ;;the resistance depends on the speed (see the resistance reporter)
+        ;;modstanden er proportionel med kvadratet på hastigheden (hvis man fordobler hastigheden, firedobler man modstanden)
+
+    if speed > 0 [set d-speed d-speed - resistance] ;;if currently going right, resistance towards left
+    if speed < 0 [set d-speed d-speed + resistance] ;;if currently going left, resistance towards right
+
+print word "d-speed :" d-speed
+
+    ;;add the acceleration vector to the speed
+    set old-speed speed ;;the previous speed
+
+    set speed speed + d-speed ;;d-speed is the resulting force/acceleration vector of all the factors
+
+    set push-force 0 ;;reset the skubbekraft once it has been applied
+    set d-speed 0 ;;reset the acceleration vector once it has been applied
+
+    if speed < lower-limit and speed > 0 [set speed 0] ;;to the right ;;@tweak this (otherwise it never quite reaches 0)
+    if speed > (- lower-limit) and speed < 0 [set speed 0] ;;to the left
+
+    set speed precision speed 5 ;;@precision can be tweaked
+
+    set global-speed speed ;;testing, plots all the time
+    ;;if old-speed != speed [set global-speed speed] ;;for plotting only when the speed changes @?
+  ]
+
+  ;;and now move!
+  ask objects [
+    forward speed ;;'forward' means to the right (90) if positive number and to the left if negative
+ if speed > 0 [print word "speed: " speed]
+    ]
+
+ ;;SPARKS
+  ask patch (object-x) (object-y - 2) [
+    if (global-speed > 0 or global-speed < 0) and season != "winter" [ ;;only if the object is moving and it's not winter (ice = 'no' friction)
+
+    sprout-graphics 2 [
+      set shape "star" set color yellow set size 0.7 set lifetime 0
+
+        let rando random 2 ;;random little way to set random heading in one of two intervals
+        ifelse rando = 1
+          [set heading 270 + (random 91)] ;;somewhere between 270 and 360
+          [set heading random 91] ;;between 0 and 90
+
+  ]]]
+
 end
 
 
-to check-object
-  if any? objects with [pxcor > 15] [
-    ask objects [
-      setxy 18 -17]
+to-report resistance
+  report speed ^ 2 / resistance-divisor ;;@now fixed, should change
+end
 
+
+to check-win
+;;  let object-position round [
+
+  ask patch (max-pxcor - 13) 0 [
+    if count objects-here = 1 and [speed] of objects-here = [0] ;;completed only if the object stands still in front of the house (@can change accuracy needed)
+      [set win? TRUE]]
+
+  if win? = TRUE [
+    set last-score score
+    set score score + 1
+    ask objects [die]
     ask players [set shape "person"]
+    ask patch 5 (max-pycor - 5) [set plabel "Nice! Now onto the next thing!" ]
+    set win? FALSE
+    set global-speed 0 set global-d-speed 0
 
+  ]
+
+end
+
+to update-graphics
+  if score != last-score [ ask patch (max-pxcor - 1) (max-pycor - 1) [set plabel (word "Score:" score)] ] ;;update score counter
+
+  ask graphics [ ;;the visual sparks
+    forward 1
+    set lifetime lifetime + 1
+    if lifetime >= 2[die]
   ]
 end
 
 
-;;OBJECTS
+to check-object ;;to see if they've failed and pushed it over the edge
+  if any? objects with [pxcor > (max-pxcor - 10)] [
+    ask objects [
+      setxy (max-pxcor - 5) -17] ;;@apply gravity to actually make them fall down instead!
 
-to object-sheep
-  ask objects [die]
-
-  create-objects 1 [
-    set shape "sheep"
-    set color white
-    set size 3
-    setxy 0 0
+    ask players [set shape "person"]
+    user-message "You failed! :-( Try again!"
+    play-level ;;starts the level over
   ]
 end
 
@@ -113,36 +193,121 @@ to move-left
     setxy (object-x + 1) 0
     set shape "pushing-left"
   ]
+  set push-force (push-force - push) ;;pushing to the left means negative push-force in these calculations (negative speed = going to the left)
 
-  ask objects [
-    set heading 270 fd 1]
 
   check-object
 end
 
 to move-right
  ask players [
-    setxy (object-x + -1) 0
+    ifelse object-x > min-pxcor
+        [setxy (object-x + -1) 0]
+        [setxy min-pxcor 0]
     set shape "pushing-right"
   ]
-
-  ask objects [
-    set heading 90 fd 1]
+  set push-force push-force + push
 
   check-object
 end
+
+
+;;;GRAPHICS;;;
+
+to make-world
+  ask players [die]
+  ask objects [die]
+
+  if season = "summer" [
+  ask patches [ ;;summer sky and grass
+    ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor sky] [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;summer
+  ]]
+
+  if season = "winter" [
+    ask patches [ ;;winter sky and snow
+    ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor 94] [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ]
+    if pycor < -1 and pycor > -3 and pxcor < (max-pxcor - 9) [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
+  ]]
+
+   create-houses 1 [ ;;the house
+    set shape "house"
+    set color 24
+    set size 3
+    setxy (max-pxcor - 13) 0
+  ]
+
+  create-players 1 [ ;;the player
+    set shape "person"
+    set color black
+    set size 2.8
+    setxy (min-pxcor + 1) 0
+  ]
+
+  ask patch (max-pxcor - 1) (max-pycor - 1) [set plabel (word "Score:" score)] ;;the score counter
+end
+
+
+;;OBJECTS
+to make-object
+  ask objects [die]
+  set push-force 0
+  ask patch 5 (max-pycor - 5) [set plabel ""]
+
+
+  if level = "1 - sheep" [
+  create-objects 1 [
+    set shape "sheep"
+    set color white
+    set size 3
+    setxy (min-pxcor + 4) 0
+    set heading 90 ;;so positive speed means going to the right, negative to the left
+    set mass choose-mass ;;@ADD fixed mass here
+    set points 100
+  ]]
+
+  if level = "2 - car" [
+  create-objects 1 [
+    set shape "car2" ;;car 2 is my modified non-floating shape
+    set color 7
+    set size 3
+    setxy (min-pxcor + 4) 0
+    set heading 90 ;;so positive speed means going to the right, negative to the left
+    set mass choose-mass ;;@ADD fixed mass here
+    set points 100
+  ]]
+
+  ;;@add more objects/levels here
+end
+
+to play-level
+  make-object
+  ask players [setxy (min-pxcor + 1) 0 set shape "person"]
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
 10
-751
-552
+950
+511
 -1
 -1
-13.0
+12.0
 1
-10
+16
 1
 1
 1
@@ -150,8 +315,8 @@ GRAPHICS-WINDOW
 0
 0
 1
--20
-20
+-30
+30
 -20
 20
 0
@@ -161,10 +326,10 @@ ticks
 30.0
 
 BUTTON
-50
-115
-113
-148
+40
+250
+103
+283
 NIL
 setup
 NIL
@@ -178,10 +343,10 @@ NIL
 1
 
 BUTTON
-125
 115
-188
-148
+250
+178
+283
 NIL
 go
 T
@@ -195,10 +360,10 @@ NIL
 1
 
 BUTTON
-50
-180
-112
-213
+1135
+85
+1197
+118
 LEFT
 set action 1
 NIL
@@ -212,10 +377,10 @@ NIL
 1
 
 BUTTON
-115
-180
-182
-213
+1200
+85
+1267
+118
 RIGHT
 set action 2
 NIL
@@ -228,24 +393,79 @@ NIL
 NIL
 1
 
+INPUTBOX
+30
+10
+105
+70
+choose-mass
+30.0
+1
+0
+Number
+
+INPUTBOX
+125
+10
+185
+70
+gravity
+9.8
+1
+0
+Number
+
 MONITOR
 60
-55
-117
-100
+415
+200
+460
 NIL
-action
+min [resistance] of objects
+17
+1
+11
+
+INPUTBOX
+50
+85
+100
+145
+push
+0.06
+1
+0
+Number
+
+MONITOR
+60
+460
+200
+505
+NIL
+min [speed] of objects
+17
+1
+11
+
+MONITOR
+60
+505
+200
+550
+NIL
+min [d-speed] of objects
 17
 1
 11
 
 BUTTON
-55
-310
-110
-343
-Sheep
-object-sheep
+980
+75
+1045
+108
+winter
+set season \"winter\"\nmake-world\nmake-object
 NIL
 1
 T
@@ -256,16 +476,114 @@ NIL
 NIL
 1
 
-MONITOR
-145
-40
-202
-85
+BUTTON
+980
+115
+1045
+148
+summer
+set season \"summer\"\nmake-world\nmake-object
 NIL
-object-x
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+PLOT
+980
+285
+1460
+510
+plot 1
+NIL
+NIL
+0.0
+10.0
+0.0
+0.4
+true
+true
+"" ""
+PENS
+"speed" 1.0 0 -8053223 true "" "plot global-speed"
+"delta-speed" 1.0 0 -1184463 true "" "plot global-d-speed"
+"push-force" 1.0 0 -13840069 true "" "plot push-force"
+"0" 1.0 0 -7500403 true "" "plot 0"
+
+INPUTBOX
+110
+85
+175
+145
+lower-limit
+0.05
+1
+0
+Number
+
+MONITOR
+130
+370
+202
+415
+NIL
+push-force
 17
 1
 11
+
+INPUTBOX
+70
+150
+165
+210
+resistance-divisor
+10.0
+1
+0
+Number
+
+MONITOR
+980
+200
+1037
+245
+NIL
+score
+17
+1
+11
+
+CHOOSER
+30
+290
+122
+335
+level
+level
+"1 - sheep" "2 - car" "3 - something"
+0
+
+BUTTON
+130
+290
+190
+335
+NIL
+play-level
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -359,6 +677,16 @@ Circle -16777216 true false 30 180 90
 Polygon -16777216 true false 162 80 132 78 134 135 209 135 194 105 189 96 180 89
 Circle -7500403 true true 47 195 58
 Circle -7500403 true true 195 195 58
+
+car2
+false
+0
+Polygon -7500403 true true 300 210 279 194 261 174 240 165 226 162 213 136 203 114 185 93 159 80 135 80 75 90 0 180 0 195 0 255 300 255 300 210
+Circle -16777216 true false 180 210 90
+Circle -16777216 true false 30 210 90
+Polygon -16777216 true false 162 110 132 108 134 165 209 165 194 135 189 126 180 119
+Circle -7500403 true true 47 225 58
+Circle -7500403 true true 195 225 58
 
 circle
 false
