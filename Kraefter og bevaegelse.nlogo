@@ -9,6 +9,13 @@ globals [
   score
   last-score ;;for coding purposes, keeping track of the previous score (to see if it's changed)
   season
+  timer-running?
+
+  timer-at-end ;;timer at time of win/deaths
+
+  nr-of-pushes
+
+  energy ;;the player's energy (keeping it in a global variable for now) @change this?
 ]
 
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
@@ -35,20 +42,26 @@ graphics-own [lifetime]
 ;;;KRÆFTER OG BEVÆGELSE;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-to startup
-  setup
-end
-
 to setup
   clear-all
   set season "summer" ;;default season
   make-world
   make-object ;;the one that's chosen
+
+  set win? false
+  set timer-running? false
+  set nr-of-pushes 0
+  set energy 0
+
   reset-ticks
 end
 
 to go
+  ;;if not timer-running? [reset-timer] ;;first time go is pressed, timer is reset @CHANGE THIS so it's after the first push
+  ;;set timer-running? TRUE
+
   every 3 / hastighed   [
+
     if count objects > 0 [
       set object-x [xcor] of one-of objects
       set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
@@ -57,6 +70,7 @@ to go
     check-win
     update-graphics
     every 1 [tick] ;;@change the speed of the model?
+
   ]
 end
 
@@ -139,18 +153,26 @@ end
 to check-win
 ;;  let object-position round [
 
-  ask patch (max-pxcor - 13) 0 [
-    if count objects-here = 1 and [speed] of objects-here = [0] ;;completed only if the object stands still in front of the house (@can change accuracy needed)
+  ask patch (max-pxcor - 13) 0 [ ;;@CHANGE THIS so the object asks instead of the patch
+    if count objects-here = 1 and [speed] of objects-here = [0] ;;completed only if the object stands still in front of the house (@can change accuracy if needed)
       [set win? TRUE]]
 
-  if win? = TRUE [
+  if win? [
+    set timer-at-end precision timer 2 ;;save how long it took them to win
+    ;;@keep tally of the nr of pushes used for each level here as well? a list?
+
     set last-score score
     set score score + 1
     ask objects [die]
     ask players [set shape "person"]
-    ask patch 5 (max-pycor - 5) [set plabel "Nice! Now onto the next thing!" ]
+    ask patch (max-pxcor - (max-pxcor / 2)) (max-pycor - 5) [set plabel (word "Nice! You took " (timer-at-end) " seconds and used " nr-of-pushes " pushes.") ]
+    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 8) [set plabel"Now onto the next thing!"]
+
+    set timer-running? FALSE ;;so the timer can start over again with their next first push
+
     set win? FALSE
     set global-speed 0 set global-d-speed 0
+
 
   ]
 
@@ -158,6 +180,21 @@ end
 
 to update-graphics
   if score != last-score [ ask patch (max-pxcor - 1) (max-pycor - 1) [set plabel (word "Score:" score)] ] ;;update score counter
+
+  ;;ask patch (min-pxcor + 1) (max-pycor - 1) [set plabel ticks] ;;simple timer counter in ticks (not needed?) (right now approximately a second)
+
+  ifelse win? [
+     ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if won, freeze visual timer at end time
+  ]
+  [
+    ifelse timer-running? [
+      ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer 1)] ;;otherwise show it ticking away (if the timer is running)
+    ]
+    [
+      ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (0)] ;;if timer shouldn't be running, just show 0
+    ]
+  ]
+
 
   ask graphics [ ;;the visual sparks
     forward 1
@@ -168,7 +205,7 @@ end
 
 
 to check-object ;;to see if they've failed and pushed it over the edge
-  if any? objects with [pxcor > (max-pxcor - 10)] [
+  if any? objects with [pxcor > (max-pxcor - 10)] [ ;;if the object has fallen over the edge
     ask objects [
       setxy (max-pxcor - 5) -17] ;;@apply gravity to actually make them fall down instead!
 
@@ -183,11 +220,13 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;
 
 to move-person
-  if action != 0
-    [ if action = 1
-         [move-left]
-      if action = 2
-         [move-right]
+  if action != 0 [
+    if action = 1 [
+      move-left
+    ]
+    if action = 2 [
+      move-right
+    ]
 
       set action 0
   ]
@@ -198,20 +237,31 @@ to move-left
     setxy (object-x + 1) 0
     set shape "pushing-left"
   ]
+
+  if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
+  set timer-running? TRUE
+
   set push-force (push-force - push) ;;pushing to the left means negative push-force in these calculations (negative speed = going to the left)
 
+  set nr-of-pushes nr-of-pushes + 1
 
   check-object
 end
 
 to move-right
  ask players [
-    ifelse object-x > min-pxcor
-        [setxy (object-x + -1) 0]
+    ifelse object-x > min-pxcor + 1
+        [setxy (object-x + -1) 0] ;;@
         [setxy min-pxcor 0]
     set shape "pushing-right"
   ]
+
+  if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
+  set timer-running? TRUE
+
   set push-force push-force + push
+
+  set nr-of-pushes nr-of-pushes + 1
 
   check-object
 end
@@ -256,8 +306,9 @@ end
 to make-object
   ask objects [die]
   set push-force 0
-  ask patch 5 (max-pycor - 5) [set plabel ""]
 
+  ask patch (max-pxcor - (max-pxcor / 2)) (max-pycor - 5) [set plabel ""] ;;the patches displaying the 'nice work!' after the previous completion
+  ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 8) [set plabel""]
 
   if level = "1 - sheep" [
   create-objects 1 [
@@ -287,8 +338,22 @@ end
 to play-level
   make-object
   ask players [setxy (min-pxcor + 1) 0 set shape "person"]
+  set push-force 0
+  ask objects [set speed 0]
+  set nr-of-pushes 0 ;;@could save a total nr of pushes across levels?
+  set timer-running? FALSE ;;so the timer can start over again with their first push
+
 end
 
+
+to-report show-timer
+  ifelse timer-running? [
+    report timer
+  ]
+  [
+    report "Spillet kører ikke endnu"
+  ]
+end
 
 
 
@@ -331,9 +396,9 @@ ticks
 
 BUTTON
 40
-250
+190
 103
-283
+223
 NIL
 setup
 NIL
@@ -341,16 +406,16 @@ NIL
 T
 OBSERVER
 NIL
-NIL
+S
 NIL
 NIL
 1
 
 BUTTON
 115
-250
+190
 178
-283
+223
 NIL
 go
 T
@@ -358,16 +423,16 @@ T
 T
 OBSERVER
 NIL
-NIL
+G
 NIL
 NIL
 1
 
 BUTTON
-1135
-85
-1197
-118
+1305
+10
+1367
+43
 LEFT
 set action 1
 NIL
@@ -381,10 +446,10 @@ NIL
 1
 
 BUTTON
-1200
-85
-1267
-118
+1370
+10
+1437
+43
 RIGHT
 set action 2
 NIL
@@ -398,10 +463,10 @@ NIL
 1
 
 INPUTBOX
-30
-10
-105
-70
+1305
+220
+1380
+280
 choose-mass
 2.0
 1
@@ -409,10 +474,10 @@ choose-mass
 Number
 
 INPUTBOX
-125
-10
-185
-70
+1380
+220
+1440
+280
 gravity
 9.8
 1
@@ -420,11 +485,11 @@ gravity
 Number
 
 MONITOR
-60
-415
-200
-460
-NIL
+52
+375
+192
+420
+current resistance
 min [resistance] of objects
 17
 1
@@ -432,9 +497,9 @@ min [resistance] of objects
 
 INPUTBOX
 50
-85
+25
 100
-145
+85
 push
 0.2
 1
@@ -442,21 +507,21 @@ push
 Number
 
 MONITOR
-60
-460
-200
-505
-NIL
+50
+420
+190
+465
+current object speed
 min [speed] of objects
 17
 1
 11
 
 MONITOR
-60
-505
-200
-550
+50
+465
+190
+510
 NIL
 min [d-speed] of objects
 17
@@ -464,10 +529,10 @@ min [d-speed] of objects
 11
 
 BUTTON
-980
-75
-1045
-108
+960
+10
+1025
+43
 winter
 set season \"winter\"\nmake-world\nmake-object
 NIL
@@ -481,10 +546,10 @@ NIL
 1
 
 BUTTON
-980
-115
-1045
-148
+960
+50
+1025
+83
 summer
 set season \"summer\"\nmake-world\nmake-object
 NIL
@@ -520,9 +585,9 @@ PENS
 
 INPUTBOX
 110
-85
+25
 175
-145
+85
 lower-limit
 0.05
 1
@@ -530,10 +595,10 @@ lower-limit
 Number
 
 MONITOR
-130
-370
-202
-415
+120
+330
+192
+375
 NIL
 push-force
 17
@@ -542,9 +607,9 @@ push-force
 
 INPUTBOX
 70
-150
+90
 165
-210
+150
 resistance-divisor
 100.0
 1
@@ -552,10 +617,10 @@ resistance-divisor
 Number
 
 MONITOR
-980
-200
-1037
-245
+960
+100
+1017
+145
 NIL
 score
 17
@@ -564,9 +629,9 @@ score
 
 CHOOSER
 30
-290
+230
 122
-335
+275
 level
 level
 "1 - sheep" "2 - car" "3 - something"
@@ -574,9 +639,9 @@ level
 
 BUTTON
 130
-290
+230
 190
-335
+275
 NIL
 play-level
 NIL
@@ -590,10 +655,10 @@ NIL
 1
 
 SLIDER
-1095
-145
-1267
-178
+1075
+15
+1247
+48
 hastighed
 hastighed
 1
@@ -603,6 +668,50 @@ hastighed
 1
 %
 HORIZONTAL
+
+MONITOR
+1065
+105
+1285
+150
+NIL
+show-timer
+17
+1
+11
+
+MONITOR
+1300
+105
+1357
+150
+NIL
+ticks
+17
+1
+11
+
+MONITOR
+960
+170
+1035
+215
+NIL
+nr-of-pushes
+17
+1
+11
+
+MONITOR
+960
+220
+1017
+265
+NIL
+energy
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
