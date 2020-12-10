@@ -48,14 +48,16 @@ to setup
 end
 
 to go
-  if count objects > 0 [
-    set object-x [xcor] of one-of objects
-    set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
-  move
-  accelerate-object
-  check-win
-  update-graphics
-  every 1 [tick] ;;@change the speed of the model?
+  every 3 / hastighed   [
+    if count objects > 0 [
+      set object-x [xcor] of one-of objects
+      set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
+    move
+    accelerate-object
+    check-win
+    update-graphics
+    every 1 [tick] ;;@change the speed of the model?
+  ]
 end
 
 to move
@@ -73,7 +75,7 @@ to accelerate-object
   ask objects [
     ;;calculate the acceleration vector (d-speed)
 
-print word "push-force: " push-force
+;;print word "push-force: " push-force
     ;; + skubbekraften
    set d-speed d-speed + push-force ;;positive if right, negative if left
 
@@ -85,7 +87,7 @@ print word "push-force: " push-force
     if speed > 0 [set d-speed d-speed - resistance] ;;if currently going right, resistance towards left
     if speed < 0 [set d-speed d-speed + resistance] ;;if currently going left, resistance towards right
 
-print word "d-speed :" d-speed
+;;print word "d-speed :" d-speed
 
     ;;add the acceleration vector to the speed
     set old-speed speed ;;the previous speed
@@ -106,8 +108,10 @@ print word "d-speed :" d-speed
 
   ;;and now move!
   ask objects [
+
+
     forward speed ;;'forward' means to the right (90) if positive number and to the left if negative
- if speed > 0 [print word "speed: " speed]
+; if speed > 0 [print word "speed: " speed]
     ]
 
  ;;SPARKS
@@ -185,7 +189,8 @@ to move-person
       if action = 2
          [move-right]
 
-      set action 0]
+      set action 0
+  ]
 end
 
 to move-left
@@ -283,7 +288,6 @@ to play-level
   make-object
   ask players [setxy (min-pxcor + 1) 0 set shape "person"]
 end
-
 
 
 
@@ -399,7 +403,7 @@ INPUTBOX
 105
 70
 choose-mass
-30.0
+2.0
 1
 0
 Number
@@ -432,7 +436,7 @@ INPUTBOX
 100
 145
 push
-0.06
+0.2
 1
 0
 Number
@@ -542,7 +546,7 @@ INPUTBOX
 165
 210
 resistance-divisor
-10.0
+100.0
 1
 0
 Number
@@ -584,6 +588,21 @@ NIL
 NIL
 NIL
 1
+
+SLIDER
+1095
+145
+1267
+178
+hastighed
+hastighed
+1
+100
+100.0
+1
+1
+%
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
