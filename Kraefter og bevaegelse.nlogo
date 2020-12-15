@@ -142,9 +142,10 @@ to do-mouse-stuff
   ]
 
 
-  if mouse-down? [ ;;to avoid division by 0
+  if mouse-down? and abs mouse-dist > 0 [ ;;to avoid division by 0
 
     ;;ADD THE ACCELERATION VECTOR BASED ON THE DISTANCE
+
     set mouse-divisor scaling-mouse / mouse-dist ;;/ scaling-mouse ;;@ testing size of scaling-mouse in interface
 
     set mouse-acc (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
@@ -452,7 +453,6 @@ end
 ;;to-report mouse-was-down?
   ;;ifelse mouse-down? [report TRUE][report FALSE]
 ;;end
-
 
 
 
