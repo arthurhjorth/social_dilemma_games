@@ -16,15 +16,25 @@ globals [
   nr-of-pushes
 
   energy ;;the player's energy (keeping it in a global variable for now) @change this?
+
+  mouse-was-down?
+  mouse-dist ;;distance from mouse-down point to object
+  mouse-acc
+  old-mouse-x ;;keeping track of whether the mouse has been moved
+  old-object-x ;;keeping track for mgraphics (mouse) purposes
+  update-mgraphics?
+  mouse-divisor
 ]
 
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
 breed [objects object]
 breed [players player]
-breed [graphics graphic]
+breed [graphics graphic] ;;sparks
+breed [mgraphics mgraphic] ;;mouse-related graphics
 
 players-own [
   force
+  ;;@energy
 ]
 
 objects-own [
@@ -36,7 +46,8 @@ objects-own [
   points
 ]
 
-graphics-own [lifetime]
+graphics-own [lifetime name]
+mgraphics-own [lifetime name]
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;KRÆFTER OG BEVÆGELSE;;;
@@ -51,7 +62,9 @@ to setup
   set win? false
   set timer-running? false
   set nr-of-pushes 0
-  set energy 0
+  set energy start-energy ;;@
+
+  set mouse-was-down? FALSE
 
   reset-ticks
 end
@@ -60,16 +73,25 @@ to go
   ;;if not timer-running? [reset-timer] ;;first time go is pressed, timer is reset @CHANGE THIS so it's after the first push
   ;;set timer-running? TRUE
 
+ ;; every 2 / hastighed [do-mouse-stuff] ;;@figure out how this is best visualised, related to model running speed
+
   every 3 / hastighed   [
 
     if count objects > 0 [
       set object-x [xcor] of one-of objects
       set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
+
+    do-mouse-stuff
+
     move
+
+    ;;do-mouse-stuff ;;figure out how to make this fit with hastighed/make it show
     accelerate-object
     check-win
     update-graphics
-    every 1 [tick] ;;@change the speed of the model?
+
+    every 1 [tick] ;;@change the tick speed?
+    ;;do-mouse-stuff
 
   ]
 end
@@ -79,6 +101,65 @@ to move
   every 0.5
     [check-object] ;;to see if they've failed
 end
+
+to do-mouse-stuff
+
+  if old-mouse-x != mouse-xcor or old-object-x != object-x [ ask mgraphics [die] set update-mgraphics? TRUE ] ;;@update visuals only if mouse or object position has changed
+
+  if update-mgraphics? [
+
+  if mouse-down? [
+    create-mgraphics 1 [
+      set size 1
+      set color yellow
+      set shape "circle"
+      setxy (mouse-xcor) (object-y) ;;@mouse-ycor instead?
+      set lifetime 1 ;;@?
+      set name "mouse-dot"
+    ]
+
+    let distanabs (mouse-xcor - object-x)
+
+    create-mgraphics 1 [ ;;dot in the middle of the object
+    set size 1
+    set color yellow
+    set shape "circle"
+    setxy (object-x) (object-y)
+    set lifetime 1
+    set name "object-dot"
+    let turtle-number item 0 [who] of mgraphics with [name = "mouse-dot"] ;;the nr of the turtle under the mouse
+    create-link-with turtle turtle-number [set thickness 0.5 set color yellow set mouse-dist link-length] ;;visual link showing distance
+    ]
+
+
+    ];;if mouse down end
+  ];;if update-mgraphics?
+
+
+  if not mouse-down? [
+    set mouse-dist 0
+    set mouse-acc 0 ;;accelerationsvektoren tilføjes kun så længe musen stadig er holdt nede
+  ]
+
+
+  if mouse-down? [ ;;to avoid division by 0
+
+    ;;ADD THE ACCELERATION VECTOR BASED ON THE DISTANCE
+    set mouse-divisor scaling-mouse / mouse-dist ;;/ scaling-mouse ;;@ testing size of scaling-mouse in interface
+
+    set mouse-acc (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
+
+    if mouse-xcor > object-x [set mouse-acc (mouse-acc)] ;;if pushing left, subtract push-force instead of adding it (negative speed = left)
+  if mouse-xcor < object-x [set mouse-acc (- mouse-acc)]
+  ]
+
+  set push-force mouse-acc ;;push-force is added to d-speed in accelerate-object
+ ;; print push-force
+
+  set old-mouse-x mouse-xcor ;;to check next run through if mouse position has changed ;;@delete?
+  set old-object-x object-x
+end
+
 
 
 ;;accelerationsvektor (+ hvis spilleren skubber) m/s^2
@@ -91,7 +172,7 @@ to accelerate-object
 
 ;;print word "push-force: " push-force
     ;; + skubbekraften
-   set d-speed d-speed + push-force ;;positive if right, negative if left
+   set d-speed d-speed + push-force ;;push-force is positive if going right, negative if going left
 
     set global-d-speed d-speed
 
@@ -153,9 +234,18 @@ end
 to check-win
 ;;  let object-position round [
 
-  ask patch (max-pxcor - 13) 0 [ ;;@CHANGE THIS so the object asks instead of the patch
-    if count objects-here = 1 and [speed] of objects-here = [0] ;;completed only if the object stands still in front of the house (@can change accuracy if needed)
-      [set win? TRUE]]
+  ask houses [
+    let win-patches (patch-set patch-here [neighbors] of patch-here)
+    ask win-patches [
+      let the-object one-of objects-here
+      if the-object != nobody [
+        if [speed < 0.03] of the-object [
+          set win? TRUE
+        ]
+      ]
+  ]
+  ]
+
 
   if win? [
     set timer-at-end precision timer 2 ;;save how long it took them to win
@@ -356,10 +446,12 @@ to-report show-timer
 end
 
 
+;;@TESTING OUT MOUSE CLICK STUFF
 
-
-
-
+;;@MAKING THIS A GLOBAL INSTEAD
+;;to-report mouse-was-down?
+  ;;ifelse mouse-down? [report TRUE][report FALSE]
+;;end
 
 
 
@@ -396,9 +488,9 @@ ticks
 
 BUTTON
 40
-190
+160
 103
-223
+193
 NIL
 setup
 NIL
@@ -413,9 +505,9 @@ NIL
 
 BUTTON
 115
-190
+160
 178
-223
+193
 NIL
 go
 T
@@ -497,9 +589,9 @@ min [resistance] of objects
 
 INPUTBOX
 50
-25
+10
 100
-85
+70
 push
 0.2
 1
@@ -585,9 +677,9 @@ PENS
 
 INPUTBOX
 110
-25
+10
 175
-85
+70
 lower-limit
 0.05
 1
@@ -607,11 +699,11 @@ push-force
 
 INPUTBOX
 70
-90
+75
 165
-150
+135
 resistance-divisor
-100.0
+10.0
 1
 0
 Number
@@ -629,19 +721,19 @@ score
 
 CHOOSER
 30
-230
+200
 122
-275
+245
 level
 level
 "1 - sheep" "2 - car" "3 - something"
-0
+1
 
 BUTTON
 130
-230
+200
 190
-275
+245
 NIL
 play-level
 NIL
@@ -649,7 +741,7 @@ NIL
 T
 OBSERVER
 NIL
-NIL
+P
 NIL
 NIL
 1
@@ -663,7 +755,7 @@ hastighed
 hastighed
 1
 100
-100.0
+82.0
 1
 1
 %
@@ -712,6 +804,28 @@ energy
 17
 1
 11
+
+INPUTBOX
+1025
+220
+1090
+280
+start-energy
+100.0
+1
+0
+Number
+
+INPUTBOX
+85
+255
+180
+315
+scaling-mouse
+1000.0
+1
+0
+Number
 
 @#$#@#$#@
 ## WHAT IS IT?
