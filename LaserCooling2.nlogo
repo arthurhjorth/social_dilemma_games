@@ -16,11 +16,15 @@ globals
   last-magnetic-field ;;to check if the visualisation should be updated
   current-magnetic-field
 
+  particle-delta-e ;;always 0
+
   temp-list
   avg-temp
   counter ;;for calculating rolling average for the temperature plot
 
   collide?
+
+  h ;;used for loop counts, different possible photon headings (in update-resonate-with)
 ]
 
 breed [ particles particle ]
@@ -31,7 +35,7 @@ breed [emissions emission] ;;the dead photons
 emissions-own [speed]
 stars-own [lifetime] ;;
 flashes-own [birthday energy]
-patches-own [patch-field]
+patches-own [patch-field laser-patch? laser-heading photon-0? photon-90? photon-180? photon-270? photons-here-list]
 
 particles-own
 [
@@ -42,6 +46,9 @@ particles-own
   excited?
   my-time-excited
   my-times-interacted
+
+  delta-x ;;x speed vector
+  delta-y ;;y speed vector
 ]
 
 photons-own [speed last-collision frequency]
@@ -53,12 +60,15 @@ to setup
   set-default-shape particles "circle"
   set-default-shape flashes "plane"
   set max-tick-delta 0.1073
-;  set box-edge (round (max-pxcor * box-size / 100))  ;; the box size is determined by the slider
   set box-edge max-pxcor
   make-box
-  set last-magnetic-field 0 set current-magnetic-field 1 ;;CLUMSY, but works. For the case if it's off to begin with - but they turn the visualisation on later ;;AH: Yup :)
+  set last-magnetic-field 0 set current-magnetic-field 1 ;;for the case if it's off to begin with - but they turn the visualisation on later
   show-magnetic-field
+  set particle-delta-e 0
   make-particles
+  ask particles [update-x-and-delta-ys]
+  make-lasers
+
   update-variables
   set init-avg-speed avg-speed
   set init-avg-energy avg-energy
@@ -89,14 +99,14 @@ to update-variables ;;for plots and trackers
 end
 
 to go
-  make-photons
-  if current-magnetic-field != last-magnetic-field [show-magnetic-field] ;;updates the visualisation only if it has changed
+  if current-magnetic-field != last-magnetic-field [show-magnetic-field] ;;updates the visualisation only if it has changed (make-lasers is also in show-magnetic-field)
   ask particles [ bounce ]
   ask particles [ move ]
   ask particles
-  [ if collide? [check-for-collision] ] ;;if the toggle option for collision is on
-  ask photons [photon-move]
-  ask emissions [photon-move] ;;the dead photons
+  [ if collide? [check-for-collision] ] ;;if the toggle option for atom to atom collision is on
+
+  ask emissions [photon-move] ;;the reemitted photons
+
   ask particles [
     recolor
     if not excited? [
@@ -105,24 +115,23 @@ to go
                                      ;; want to know how much we were slowed down in the axis along which the atom moved (and direction, of course)
       if item 0 resonance-check [
         set excited? true
-        hatch-stars 1 [set shape "star" set color 45 set size 2.5 set lifetime 0];;IBH added visualisation of where there was resonance
-        slow-down item 1 resonance-check ; item 1 contains the photon
+        resonance-visuals
+
+        slow-down item 1 resonance-check ; item 1 contains the photon ;;@CHANGE THIS, now item 1 is a list of photon headings
+        update-x-and-delta-ys
         set my-times-interacted (my-times-interacted + 1)
-        ask item 1 resonance-check [die] ;;if there's resonance, the photon 'dies' (is absorbed)
       ]
     ]
 
     if excited? [
      set my-time-excited (my-time-excited + 1)
 
-      if my-time-excited = max-time-excited [
-       reemit-photon ;;@ADD effect on the atom of reemitting the photon? (or not? since it should average to 0)
+      if my-time-excited = max-time-excited [ ;;@could make max-time-excited a distribution instead of a fixed nr?
+       reemit-photon ;;the effect on the atom of reemitting the photon is not added since it averages to 0)
       ]
     ]
-
-
-
   ]
+
   tick-advance tick-delta
   if floor ticks > floor (ticks - tick-delta)
   [
@@ -142,16 +151,37 @@ to go
   display
 end
 
+to make-lasers ;;in setup
+  ask patches [
+    set laser-patch? FALSE set photon-0? FALSE set photon-90? FALSE set photon-180? FALSE set photon-270? FALSE
+    set photons-here-list []
+  ] ;;default values for non-laser patches
+
+  ask patches with [(abs pxcor <= 4 and abs pycor < max-pycor) or abs pycor <= 4 and abs pxcor < max-pxcor] [ ;;the laser patches
+    set pcolor scale-color red laser-frequency -80 80 ;;tones of red depending on frequency @change numbers
+    set laser-patch? TRUE
+
+    if abs pxcor <= 4 [
+      set photon-0? TRUE ;;bottom laser shooting upwards
+      set photon-180? TRUE ;;top laser shooting downwards
+      set photons-here-list lput 0 photons-here-list
+      set photons-here-list lput 180 photons-here-list
+    ]
+    if abs pycor <= 4 [
+      set photon-90? TRUE ;;left laser shooting right
+      set photon-270? TRUE ;;right laser shooting left
+      set photons-here-list lput 90 photons-here-list
+      set photons-here-list lput 270 photons-here-list
+  ]
+  ]
+end
+
+
 to calculate-avg-temp
   set temp-list replace-item counter temp-list (round (sum [energy] of flashes)) ;;replaces the next item in the rolling average list with the current 'temperature'
   if reduce * temp-list != 0 [set avg-temp mean temp-list] ;;only updates avg-temp once five readings have been made
   ifelse counter < average-over - 1 [set counter counter + 1] [set counter 0] ;;loops through so we always update the oldest temperature reading (-1 since first item is 0)
 end
-
-to test-stuff
-  print temp-list
-end
-
 
 to reemit-photon
   set excited? false set my-time-excited 0 ;;the atom becomes non-excited after a while (now ignoring the actual re-emission since the effect on the atom averages to 0 over time)
@@ -168,46 +198,55 @@ to photon-move
   fd speed * tick-delta
 end
 
-to slow-down [the-photon]
+
+
+
+to slow-down [photon-headings] ;;particle procedure.
 ;  show (word "Old speed: " speed)
 
-  ;;@
   let old-speed speed
+
+  ;;@slow down here
+
+
+
+  ;;---OLD WITH PHOTON AGENTS---
 
   ;; ah: this is an atom procedure and it takes a photon. It slows down, OR speeds up the atom depending on the relative angles
   ;; of the photon and atom
 
   ;; first we determine the speed ONLY along the axis that the photon moves, and
   ;; whether they are moving in the same or opposite direction
-  let relative-angle heading - [heading] of the-photon
-  let same-direction? (relative-angle < 90 or relative-angle > 270)
-  let rel-same-axis-speed 0
-  let rel-other-axis-speed 0
-  if [heading] of the-photon = 0 or [heading] of the-photon = 180 [
-    set rel-same-axis-speed abs (cos heading) * speed
-    set rel-other-axis-speed abs (sin heading) * speed
-    set rel-same-axis-speed rel-same-axis-speed - 1
-    set heading atan rel-other-axis-speed rel-same-axis-speed ;; here, same axis is Y axis
-    set speed sqrt (rel-same-axis-speed ^ 2 + rel-other-axis-speed ^ 2)
 
-  ]
-  if [heading] of the-photon = 90 or [heading] of the-photon = 270[
-    set rel-same-axis-speed abs (sin heading) * speed
-    set rel-other-axis-speed abs (cos heading) * speed
+  ;;let relative-angle heading - [heading] of the-photon
+  ;;let same-direction? (relative-angle < 90 or relative-angle > 270)
+  ;;let rel-same-axis-speed 0
+  ;;let rel-other-axis-speed 0
+  ;;if [heading] of the-photon = 0 or [heading] of the-photon = 180 [
+    ;;set rel-same-axis-speed abs (cos heading) * speed
+    ;;set rel-other-axis-speed abs (sin heading) * speed
+    ;;set rel-same-axis-speed rel-same-axis-speed - 1
+    ;;set heading atan rel-other-axis-speed rel-same-axis-speed ;; here, same axis is Y axis
+    ;;set speed sqrt (rel-same-axis-speed ^ 2 + rel-other-axis-speed ^ 2)
 
-    set rel-same-axis-speed rel-same-axis-speed - 1
-    set heading atan rel-same-axis-speed rel-other-axis-speed ;; here, same axis is X axis
-    set speed sqrt (rel-same-axis-speed ^ 2 + rel-other-axis-speed ^ 2)
+  ;;]
+  ;;if [heading] of the-photon = 90 or [heading] of the-photon = 270[
+    ;;set rel-same-axis-speed abs (sin heading) * speed
+    ;;set rel-other-axis-speed abs (cos heading) * speed
 
-  ]
+    ;;set rel-same-axis-speed rel-same-axis-speed - 1
+    ;;set heading atan rel-same-axis-speed rel-other-axis-speed ;; here, same axis is X axis
+    ;;set speed sqrt (rel-same-axis-speed ^ 2 + rel-other-axis-speed ^ 2)
+
+  ;;]
 
 ;  show (word "New speed: " speed)
 
-  ;;@
   let new-speed speed
 
   if new-speed > old-speed [set nr-sped-up (nr-sped-up + 1)]
   if new-speed < old-speed [set nr-slowed-down (nr-slowed-down + 1)]
+
 
 
 end
@@ -238,81 +277,64 @@ to show-magnetic-field
       ]
     set current-magnetic-field max-field
   ]
-  [ask patches with [pcolor != yellow] [set pcolor black]] ;;else
+  [ask patches with [pcolor != yellow] [set pcolor black] make-lasers] ;;else
 end
 
 
-to-report resonance? ;; AH: particle procedure
-  if not any? photons-here [report (list false 0) ]
-  let potential-photon one-of photons-here
-  ;; now we have to find out the relative speed of the photon to the particle, in order to account for dobbler effect
-  let relative-angle heading - [heading] of potential-photon
-  let rel-speed (abs cos relative-angle) * speed / 10
+to-report resonance? ;;particle procedure
+
+  ifelse [length photons-here-list < 1] of patch-here [ ;;if not on a laser patch
+    report (list false 0)
+  ]
+  [
+    report (list true photons-here-list) ;;here item 1 is a nested list containing the headings of the photons on the patch
+  ]
+
+
+  ;;@DO RESONANCE CALCULATIONS HERE
+
+  ;;two approaches, right now patches have:
+    ;;photons-here-list (containing headings of the photons on that patch)
+    ;;and booleans: photon-90?, photon-180? and so on
+
+
+
+  ;;--- EARLIER RESONANCE CALCULATIONS (with photon agents) ---
+
+   ;; now we have to find out the relative speed of the photon to the particle, in order to account for dobbler effect
+  ;;let relative-angle heading - [heading] of potential-photon
+  ;;let rel-speed (abs cos relative-angle) * speed / 10
+
   ;; if relative angle is between 270 and 90 then we are moving towards the particle and we add the frequency
   ;; else we descrease it.
   ;; AH: using this: https://courses.lumenlearning.com/suny-osuniversityphysics/chapter/17-7-the-doppler-effect/#:~:text=Use%20the%20following%20equation%3A,due%20to%20a%20moving%20observer.
   ;; it seems that  it's really just 1 / relative speed
-  ;; So:
-  if relative-angle = 90 or relative-angle = 270 [ ;;AH: special case, but it would work to include it in the if below since it would just be frequency + 0 * frequency
-    report (list (current-delta-e = [frequency] of potential-photon) potential-photon )
-  ]
-  if relative-angle < 90 or relative-angle > 270 [ ;; moving away from
-    report (list (current-delta-e = round ([frequency] of potential-photon - (rel-speed * [frequency] of potential-photon))) potential-photon )
-  ]
-  if relative-angle > 90 and  relative-angle < 270 [ ;; moving towards
+  ;;So:
+
+  ;;if relative-angle = 90 or relative-angle = 270 [ ;;AH: special case, but it would work to include it in the if below since it would just be frequency + 0 * frequency
+    ;;report (list (current-delta-e = [frequency] of potential-photon) potential-photon )
+  ;;]
+  ;;if relative-angle < 90 or relative-angle > 270 [ ;; moving away from
+    ;;report (list (current-delta-e = round ([frequency] of potential-photon - (rel-speed * [frequency] of potential-photon))) potential-photon )
+  ;;]
+  ;;if relative-angle > 90 and  relative-angle < 270 [ ;; moving towards
 ;    show (list current-delta-e round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon)))
-    report (list (current-delta-e = round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon))) potential-photon )
-  ]
+    ;;report (list (current-delta-e = round ([frequency] of potential-photon + (rel-speed * [frequency] of potential-photon))) potential-photon )
+  ;;]
 end
 
+to resonance-visuals
+  hatch-stars 1 [set shape "star" set color 45 set size 2.5 set lifetime 0];;star blink visualisation of where there was resonance
 
-
-
-to make-photons
-  ; AH: nice :)
-  ask patches with [ abs pxcor <= 4 and pycor = max-pycor] [ ;;top patches
-  let n random-poisson (rate * tick-delta) ;;using a Poisson distribution keeps the rate of particle emission the same regardless of the size of tick-delta (from Waterfall model)
-    sprout-photons n [
-      set color scale-color red laser-frequency 0 100
-      set speed 10 ;;@change photon speed?
-      set heading 180
-      set frequency laser-frequency
-  ]]
-  ask patches with [abs pxcor <= 4 and pycor = min-pycor] [ ;;bottom patches
-  let n random-poisson (rate * tick-delta)
-    sprout-photons n [
-      set color scale-color red laser-frequency 0 100
-      set speed 10 ;;@change this speed, make a variable
-      set heading 0
-      set frequency laser-frequency
-  ]]
-  ask patches with [pxcor = min-pxcor and abs pycor <= 4] [ ;;left patches
-  let n random-poisson (rate * tick-delta)
-    sprout-photons n [
-      set color scale-color red laser-frequency 0 100
-      set speed 10 ;;@change this speed, make a variable
-      set heading 90
-      set frequency laser-frequency
-  ]]
-  ask patches with [pxcor = max-pxcor and abs pycor <= 4] [ ;;right patches
-  let n random-poisson (rate * tick-delta)
-    sprout-photons n [
-      set color scale-color red laser-frequency 0 100
-      set speed 10 ;;@change this speed, make a variable
-      set heading 270
-      set frequency laser-frequency
-  ]]
+  ;;traceback
 
 end
+
 
 to calculate-tick-delta
-  ;; tick-delta is calculated in such way that even the fastest
-  ;; particle will jump at most 1 patch length when we advance the
-  ;; tick counter. As particles jump (speed * tick-delta) each time, making
-  ;; tick-delta the inverse of the speed of the fastest particle
-  ;; (1/max speed) assures that. Having each particle advance at most
-  ;; one patch-length is necessary for it not to "jump over" a wall
-  ;; or another particle.
+  ;; tick-delta is calculated in such way that even the fastest particle will jump at most 1 patch length when we advance the
+  ;; tick counter. As particles jump (speed * tick-delta) each time, making tick-delta the inverse of the speed of the fastest particle
+  ;; (1/max speed) assures that. Having each particle advance at most one patch-length is necessary for it not to "jump over" a wall or another particle.
   ifelse any? particles with [speed > 0]
     [ set tick-delta min list (1 / (ceiling max [speed] of particles)) max-tick-delta ]
     [ set tick-delta max-tick-delta ]
@@ -336,14 +358,40 @@ to bounce  ;; particle procedure
   let my-speed speed
 
   ask patch new-px new-py
-  [ sprout-flashes 1 [
+  [ sprout-flashes 1 [ ;;the edges flash for every collision
     set energy my-speed ;;@should we round this? for temperature calculations
       set color pcolor - 2
       set birthday ticks
       set heading 0
     ]
   ]
+
+  update-x-and-delta-ys ;;recalculate x- and y-speed for this atom
 end
+
+
+to update-x-and-delta-ys ;;particle procedure. Run after each bounce, each photon interaction, and in setup
+  set delta-x precision (sin heading * speed) 3 ;; AH: runder af til 3 decimaler, så vi ikke ender med 0.000000000000001
+  set delta-y precision (cos heading * speed) 3
+end
+
+
+  ;;alle atomerne har current-deltax og current-deltay
+  ;;fordi fotoner kun er x eller y
+  ;;givet denne delta-x, er der så resonans i den ene eller anden retning, og det samme for y, og så + med den frekvens i fotonerne lige nu
+
+  ;;lav turtle procedure: update deltax and delta y
+  ;;den tager ingen argumenter
+  ;;for ethvert atom har jeg allerede farten og heading
+  ;;ud fra det kan jeg nemt beregne de her
+  ;;så den kaldes efter retningsskift efter bounce eller kollision
+
+
+  ;;prøv bare med et enkelt atom
+  ;;set heading og hastighed og se om tallene giver mening
+  ;;det er altid bare pythagoras :) hastighed + retning = hypotenusen. jeg ved hvor lang den er og kender retningen. så den i anden er altid kvadratroden af sum delta-x og delta-y
+  ;;og den kan jeg lave alting ud fra!
+  ;;pyt og så sinusreglen!
 
 to move  ;; particle procedure
   if patch-ahead (speed * tick-delta) != patch-here
@@ -352,10 +400,8 @@ to move  ;; particle procedure
 end
 
 to check-for-collision  ;; particle procedure
-  ;; Here we impose a rule that collisions only take place when there
-  ;; are exactly two particles per patch.  We do this because when the
-  ;; student introduces new particles from the side, we want them to
-  ;; form a uniform wavefront.
+  ;; Here we impose a rule that collisions only take place when there are exactly two particles per patch.  We do this because when the
+  ;; student introduces new particles from the side, we want them to form a uniform wavefront.
   ;;
   ;; Why do we want a uniform wavefront?  Because it is actually more
   ;; realistic.  (And also because the curriculum uses the uniform
@@ -558,6 +604,19 @@ to-report last-n [n the-list]
     [ report the-list ]
     [ report last-n n butfirst the-list ]
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
 @#$#@#$#@
 GRAPHICS-WINDOW
 200
@@ -587,10 +646,10 @@ ticks
 30.0
 
 BUTTON
-16
-113
-102
-146
+15
+110
+101
+143
 go/stop
 go
 T
@@ -604,10 +663,10 @@ NIL
 0
 
 BUTTON
-16
-80
-191
-113
+15
+77
+190
+110
 NIL
 setup
 NIL
@@ -621,25 +680,25 @@ NIL
 1
 
 SLIDER
-15
-45
-190
-78
+14
+42
+189
+75
 number-of-particles
 number-of-particles
 1
 1000
-501.0
+7.0
 1
 1
 NIL
 HORIZONTAL
 
 BUTTON
-101
-113
-191
-146
+100
+110
+190
+143
 go once
 go
 NIL
@@ -651,36 +710,6 @@ NIL
 NIL
 NIL
 1
-
-SLIDER
-10
-240
-190
-273
-rate
-rate
-0
-100
-22.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-15
-10
-190
-43
-particle-delta-e
-particle-delta-e
-0
-50
-20.0
-1
-1
-NIL
-HORIZONTAL
 
 SLIDER
 10
@@ -699,14 +728,14 @@ HORIZONTAL
 
 SLIDER
 10
-204
+179
 190
-237
+212
 laser-frequency
 laser-frequency
-0
-100
-90.0
+-50
+50
+0.0
 1
 1
 NIL
@@ -800,7 +829,7 @@ SWITCH
 328
 magnetic-field-on
 magnetic-field-on
-0
+1
 1
 -1000
 
@@ -886,9 +915,9 @@ PENS
 
 TEXTBOX
 15
-185
+160
 165
-203
+178
 Laser Parameters
 11
 0.0
@@ -996,6 +1025,17 @@ SET THIS BEFORE SETUP (testing)
 11
 0.0
 1
+
+MONITOR
+50
+215
+140
+260
+NIL
+particle-delta-e
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
