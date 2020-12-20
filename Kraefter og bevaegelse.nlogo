@@ -6,9 +6,12 @@ globals [
   global-speed ;;for plotting @?
   global-d-speed
   win? ;;to see if they've won
+  lost? ;;to see if they've lost (pushed the object over the edge)
+
   score
   last-score ;;for coding purposes, keeping track of the previous score (to see if it's changed)
   season
+  ;;cliff? ;;
   timer-running?
 
   timer-at-end ;;timer at time of win/deaths
@@ -27,6 +30,7 @@ globals [
 ]
 
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
+breed [explosions explosion]
 breed [objects object]
 breed [players player]
 breed [graphics graphic] ;;sparks
@@ -44,6 +48,9 @@ objects-own [
   mass
   object-friction
   points
+
+  real-heading
+  apparent-heading ;;only for fail animation
 ]
 
 graphics-own [lifetime name]
@@ -56,13 +63,13 @@ mgraphics-own [lifetime name]
 to setup
   clear-all
   set season "summer" ;;default season
-  make-world
+  make-world ;;considers cliff? true or false
   make-object ;;the one that's chosen
 
-  set win? false
+  set win? false set lost? false
   set timer-running? false
   set nr-of-pushes 0
-  set energy start-energy ;;@
+  ;;set energy start-energy ;;@
 
   set mouse-was-down? FALSE
 
@@ -70,45 +77,43 @@ to setup
 end
 
 to go
-  ;;if not timer-running? [reset-timer] ;;first time go is pressed, timer is reset @CHANGE THIS so it's after the first push
-  ;;set timer-running? TRUE
-
- ;; every 2 / hastighed [do-mouse-stuff] ;;@figure out how this is best visualised, related to model running speed
-
   every 3 / hastighed   [
 
     if count objects > 0 [
       set object-x [xcor] of one-of objects
       set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
 
-    do-mouse-stuff
+    if not lost? and not win? [do-mouse-stuff]
 
-    move
+    move-person
+    if not lost? [check-object] ;;to see if they've failed
+    if lost? [fail-animation] ;;animation of object falling down
 
-    ;;do-mouse-stuff ;;figure out how to make this fit with hastighed/make it show
-    accelerate-object
-    check-win
-    update-graphics
+    if not lost? and not win? [
+      accelerate-object
+      check-win
+      update-graphics
+    ]
 
     every 1 [tick] ;;@change the tick speed?
-    ;;do-mouse-stuff
 
   ]
 end
 
-to move
-  move-person
-  every 0.5
-    [check-object] ;;to see if they've failed
-end
 
 to do-mouse-stuff
+  if styring = "mus" [
 
-  if old-mouse-x != mouse-xcor or old-object-x != object-x [ ask mgraphics [die] set update-mgraphics? TRUE ] ;;@update visuals only if mouse or object position has changed
+
+  if not lost? and not win? and (old-mouse-x != mouse-xcor or old-object-x != object-x)
+    [ ask mgraphics [die] set update-mgraphics? TRUE ] ;;@update visuals only if mouse or object position has changed
 
   if update-mgraphics? [
 
   if mouse-down? [
+    if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
+    set timer-running? TRUE
+
     create-mgraphics 1 [
       set size 1
       set color yellow
@@ -159,6 +164,8 @@ to do-mouse-stuff
 
   set old-mouse-x mouse-xcor ;;to check next run through if mouse position has changed ;;@delete?
   set old-object-x object-x
+
+  ] ;;END of if styring = mus
 end
 
 
@@ -177,7 +184,7 @@ to accelerate-object
 
     set global-d-speed d-speed
 
-    ;; - resistance @(what sort of resistance is this?) ;;the resistance depends on the speed (see the resistance reporter)
+    ;; - resistance. The resistance depends on the speed (see the resistance reporter)
         ;;modstanden er proportionel med kvadratet på hastigheden (hvis man fordobler hastigheden, firedobler man modstanden)
 
     if speed > 0 [set d-speed d-speed - resistance] ;;if currently going right, resistance towards left
@@ -198,32 +205,27 @@ to accelerate-object
 
     set speed precision speed 5 ;;@precision can be tweaked
 
-    set global-speed speed ;;testing, plots all the time
+    set global-speed speed ;;plots continuously
     ;;if old-speed != speed [set global-speed speed] ;;for plotting only when the speed changes @?
   ]
 
   ;;and now move!
   ask objects [
-
-
     forward speed ;;'forward' means to the right (90) if positive number and to the left if negative
-; if speed > 0 [print word "speed: " speed]
+;; if speed > 0 [print word "speed: " speed]
     ]
 
  ;;SPARKS
-  ask patch (object-x) (object-y - 2) [
+  if count objects > 0 and not lost? and object-y > min-pycor + 2 [ ask patch (object-x) (object-y - 2) [
     if (global-speed > 0 or global-speed < 0) and season != "winter" [ ;;only if the object is moving and it's not winter (ice = 'no' friction)
 
     sprout-graphics 2 [
       set shape "star" set color yellow set size 0.7 set lifetime 0
-
         let rando random 2 ;;random little way to set random heading in one of two intervals
         ifelse rando = 1
           [set heading 270 + (random 91)] ;;somewhere between 270 and 360
           [set heading random 91] ;;between 0 and 90
-
-  ]]]
-
+  ]]]]
 end
 
 
@@ -233,58 +235,53 @@ end
 
 
 to check-win
-;;  let object-position round [
-
   ask houses [
     let win-patches (patch-set patch-here [neighbors] of patch-here)
     ask win-patches [
       let the-object one-of objects-here
       if the-object != nobody [
-        if [speed < 0.03] of the-object [
+        if [speed < 0.03] of the-object [ ;;@ can change accuracy needed to win
           set win? TRUE
         ]
       ]
   ]
   ]
 
-
   if win? [
     set timer-at-end precision timer 2 ;;save how long it took them to win
-    ;;@keep tally of the nr of pushes used for each level here as well? a list?
-
+    ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if won, freeze visual timer at end time
     set last-score score
     set score score + 1
     ask objects [die]
-    ask players [set shape "person"]
+    ask players [set shape "person-happy"]
+    ask graphics [die] ask mgraphics [die] ;;to kill off any sparks and the elastic (if mouse control)
     ask patch (max-pxcor - (max-pxcor / 2)) (max-pycor - 5) [set plabel (word "Nice! You took " (timer-at-end) " seconds and used " nr-of-pushes " pushes.") ]
-    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 8) [set plabel"Now onto the next thing!"]
+    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 8) [set plabel "Now onto the next thing!"]
 
     set timer-running? FALSE ;;so the timer can start over again with their next first push
-
-    set win? FALSE
     set global-speed 0 set global-d-speed 0
-
-
   ]
-
 end
 
 to update-graphics
   if score != last-score [ ask patch (max-pxcor - 1) (max-pycor - 1) [set plabel (word "Score:" score)] ] ;;update score counter
 
-  ;;ask patch (min-pxcor + 1) (max-pycor - 1) [set plabel ticks] ;;simple timer counter in ticks (not needed?) (right now approximately a second)
+  if win? or lost? [
+     ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if won or lost, freeze visual timer at end time
+     set timer-running? FALSE
+  ]
 
-  ifelse win? [
-     ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if won, freeze visual timer at end time
+
+    if timer-running? and not win? and not lost? [
+      if object-y = 0 and count objects > 0 [ ;;if the timer is running and the object hasn't fallen
+        ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer 1)] ;;show the timer ticking away
+      ]
+      ]
+
+    if not timer-running? and not win? and not lost? [
+    ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (0)] ;;if timer shouldn't be running, just show 0
   ]
-  [
-    ifelse timer-running? [
-      ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer 1)] ;;otherwise show it ticking away (if the timer is running)
-    ]
-    [
-      ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (0)] ;;if timer shouldn't be running, just show 0
-    ]
-  ]
+
 
 
   ask graphics [ ;;the visual sparks
@@ -295,22 +292,84 @@ to update-graphics
 end
 
 
-to check-object ;;to see if they've failed and pushed it over the edge
-  if any? objects with [pxcor > (max-pxcor - 10)] [ ;;if the object has fallen over the edge
-    ask objects [
-      setxy (max-pxcor - 5) -17] ;;@apply gravity to actually make them fall down instead!
+to check-object ;;to see if they've lost by pushing it over the edge (if there is one)
+
+  if [pcolor = sky or pcolor = 94] of patch (object-x) (object-y - 2) [ ;;check if the patch below the object is sky
+    set lost? TRUE
+
+    set timer-at-end precision timer 2 ;;save how long it took them to lose
+    ;;ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if lost, freeze visual timer at end time
+    set timer-running? FALSE
 
     ask players [set shape "person"]
-    user-message "You failed! :-( Try again!"
-    play-level ;;starts the level over
+
+    ask graphics [die] ask mgraphics [die] ;;kills off any sparks and the elastic
+
+    ask objects [
+      set shape (word shape "-rot") ;;objects change to rotatable shape (only difference)
+
+      set speed 0
+      set heading 0
+    ]
   ]
+
+  ;;if any? objects with [pxcor > (max-pxcor - 10)] [ ;;if the object has fallen over the edge
+    ;;ask objects [
+      ;;setxy (max-pxcor - 5) -17]
+  ;;]
 end
+
+to fail-animation ;;what happens when the object gets pushed over the edge
+  ifelse object-y > -18 [ ;;if object hasn't reached the ground yet
+   ask objects [
+      set real-heading 160
+
+      if object-x >= max-pxcor [set real-heading 180] ;;to fix bug, if super fast speed object just ends up spinning on the world edge forever
+
+      set heading real-heading ;;it really keeps heading in the same direction every time
+      fd 1
+      set apparent-heading apparent-heading + 10 ;;but looks like it's spinning each turn
+      set heading apparent-heading ;;that's all the user sees visually (due to tick-based updates)
+    ]
+  ]
+ [ ;;if object HAS reached the ground:
+    ifelse count explosions < 8 [
+      ask patches with [count objects-here = 1] [
+      sprout-explosions 1 [ ;;let's have some explosions :)
+        set color yellow
+        set size 4
+        set shape "star-rot"
+      ]
+      sprout-explosions 1 [ ;;different color
+        set color orange
+        set size 4
+        set shape "star-rot"
+      ]
+    ]
+    ]
+    [ ;;if explosions are done
+
+    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 5) [set plabel (word "Oh no, the object fell over the edge!") ]
+    ask patch (max-pxcor - (max-pxcor / 2) - 13) (max-pycor - 8) [set plabel "Press 'p' to try again!"]
+
+      ;;user-message "You failed! :-( Try again!"
+     ;;play-level ;;starts the level over
+    ]
+  ]
+
+
+
+end
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;;;MOVING THE PLAYER;;;
 ;;;;;;;;;;;;;;;;;;;;;;;
 
 to move-person
+  if styring = "tastatur" and win? = FALSE [
+
   if action != 0 [
     if action = 1 [
       move-left
@@ -321,11 +380,14 @@ to move-person
 
       set action 0
   ]
+  ]
 end
 
 to move-left
   ask players [
-    setxy (object-x + 1) 0
+    ifelse object-x < max-pxcor - 1
+        [setxy (object-x + 1) 0]
+        [setxy max-pxcor 0]
     set shape "pushing-left"
   ]
 
@@ -336,7 +398,7 @@ to move-left
 
   set nr-of-pushes nr-of-pushes + 1
 
-  check-object
+  ;;check-object
 end
 
 to move-right
@@ -345,6 +407,8 @@ to move-right
         [setxy (object-x + -1) 0] ;;@
         [setxy min-pxcor 0]
     set shape "pushing-right"
+
+    if xcor > (max-pxcor - 10) [set xcor (max-pxcor - 10)] ;;the player can't move over the edge
   ]
 
   if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
@@ -354,7 +418,9 @@ to move-right
 
   set nr-of-pushes nr-of-pushes + 1
 
-  check-object
+
+
+  ;;check-object
 end
 
 
@@ -367,13 +433,26 @@ to make-world
   if season = "summer" [
   ask patches [ ;;summer sky and grass
     ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor sky] [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;summer
-  ]]
+  ]
+    if not cliff? [
+      ask patches [
+        if pycor <= -2 [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;if no cliff, extend the grass
+      ]
+    ]
+  ]
 
   if season = "winter" [
     ask patches [ ;;winter sky and snow
     ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor 94] [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ]
     if pycor < -1 and pycor > -3 and pxcor < (max-pxcor - 9) [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
-  ]]
+  ]
+    if not cliff? [
+      ask patches [
+        if pycor <= -2 [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ] ;;if no cliff, extend the snow
+        if pycor < -1 and pycor > -3 [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
+      ]
+    ]
+  ]
 
    create-houses 1 [ ;;the house
     set shape "house"
@@ -396,6 +475,7 @@ end
 ;;OBJECTS
 to make-object
   ask objects [die]
+  ask explosions [die]
   set push-force 0
 
   ask patch (max-pxcor - (max-pxcor / 2)) (max-pycor - 5) [set plabel ""] ;;the patches displaying the 'nice work!' after the previous completion
@@ -414,7 +494,7 @@ to make-object
 
   if level = "2 - car" [
   create-objects 1 [
-    set shape "car2" ;;car 2 is my modified non-floating shape
+    set shape "push-car" ;;push-car is my modified non-floating shape
     set color 7
     set size 3
     setxy (min-pxcor + 4) 0
@@ -427,7 +507,11 @@ to make-object
 end
 
 to play-level
+  ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 5) [set plabel "" ]
+  ask patch (max-pxcor - (max-pxcor / 2) - 13) (max-pycor - 8) [set plabel ""]
+
   make-object
+  set win? FALSE set lost? FALSE
   ask players [setxy (min-pxcor + 1) 0 set shape "person"]
   set push-force 0
   ask objects [set speed 0]
@@ -438,24 +522,15 @@ end
 
 
 to-report show-timer
+  if lost? or win? [report timer-at-end]
+
   ifelse timer-running? [
-    report timer
+   report timer
   ]
   [
     report "Spillet kører ikke endnu"
   ]
 end
-
-
-;;@TESTING OUT MOUSE CLICK STUFF
-
-;;@MAKING THIS A GLOBAL INSTEAD
-;;to-report mouse-was-down?
-  ;;ifelse mouse-down? [report TRUE][report FALSE]
-;;end
-
-
-
 
 
 @#$#@#$#@
@@ -488,9 +563,9 @@ ticks
 
 BUTTON
 40
-160
+190
 103
-193
+223
 NIL
 setup
 NIL
@@ -505,9 +580,9 @@ NIL
 
 BUTTON
 115
-160
+190
 178
-193
+223
 NIL
 go
 T
@@ -578,9 +653,9 @@ Number
 
 MONITOR
 52
-375
+405
 192
-420
+450
 current resistance
 min [resistance] of objects
 17
@@ -600,9 +675,9 @@ Number
 
 MONITOR
 50
-420
+450
 190
-465
+495
 current object speed
 min [speed] of objects
 17
@@ -611,9 +686,9 @@ min [speed] of objects
 
 MONITOR
 50
-465
+495
 190
-510
+540
 NIL
 min [d-speed] of objects
 17
@@ -688,9 +763,9 @@ Number
 
 MONITOR
 120
-330
+360
 192
-375
+405
 NIL
 push-force
 17
@@ -698,10 +773,10 @@ push-force
 11
 
 INPUTBOX
+60
 70
-75
-165
-135
+155
+130
 resistance-divisor
 10.0
 1
@@ -721,19 +796,19 @@ score
 
 CHOOSER
 30
-200
+230
 122
-245
+275
 level
 level
 "1 - sheep" "2 - car" "3 - something"
-1
+0
 
 BUTTON
 130
-200
+230
 190
-245
+275
 NIL
 play-level
 NIL
@@ -773,17 +848,6 @@ show-timer
 11
 
 MONITOR
-1300
-105
-1357
-150
-NIL
-ticks
-17
-1
-11
-
-MONITOR
 960
 170
 1035
@@ -794,38 +858,37 @@ nr-of-pushes
 1
 11
 
-MONITOR
-960
-220
-1017
-265
-NIL
-energy
-17
-1
-11
-
-INPUTBOX
-1025
-220
-1090
-280
-start-energy
-100.0
-1
-0
-Number
-
 INPUTBOX
 85
-255
+285
 180
-315
+345
 scaling-mouse
 1000.0
 1
 0
 Number
+
+SWITCH
+15
+145
+105
+178
+cliff?
+cliff?
+0
+1
+-1000
+
+CHOOSER
+110
+140
+202
+185
+styring
+styring
+"mus" "tastatur"
+0
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -919,16 +982,6 @@ Circle -16777216 true false 30 180 90
 Polygon -16777216 true false 162 80 132 78 134 135 209 135 194 105 189 96 180 89
 Circle -7500403 true true 47 195 58
 Circle -7500403 true true 195 195 58
-
-car2
-false
-0
-Polygon -7500403 true true 300 210 279 194 261 174 240 165 226 162 213 136 203 114 185 93 159 80 135 80 75 90 0 180 0 195 0 255 300 255 300 210
-Circle -16777216 true false 180 210 90
-Circle -16777216 true false 30 210 90
-Polygon -16777216 true false 162 110 132 108 134 165 209 165 194 135 189 126 180 119
-Circle -7500403 true true 47 225 58
-Circle -7500403 true true 195 225 58
 
 circle
 false
@@ -1054,6 +1107,15 @@ Rectangle -7500403 true true 127 79 172 94
 Polygon -7500403 true true 195 90 240 150 225 180 165 105
 Polygon -7500403 true true 105 90 60 150 75 180 135 105
 
+person-happy
+false
+0
+Circle -7500403 true true 110 5 80
+Polygon -7500403 true true 120 90 120 195 90 285 105 300 135 300 150 225 165 300 195 300 210 285 180 195 180 90
+Rectangle -7500403 true true 135 75 165 94
+Polygon -7500403 true true 60 15 120 90 120 135 45 45
+Polygon -7500403 true true 240 15 180 90 180 135 255 45
+
 plant
 false
 0
@@ -1065,6 +1127,26 @@ Polygon -7500403 true true 165 180 165 210 225 180 255 120 210 135
 Polygon -7500403 true true 135 105 90 60 45 45 75 105 135 135
 Polygon -7500403 true true 165 105 165 135 225 105 255 45 210 60
 Polygon -7500403 true true 135 90 120 45 150 15 180 45 165 90
+
+push-car
+false
+0
+Polygon -7500403 true true 300 210 279 194 261 174 240 165 226 162 213 136 203 114 185 93 159 80 135 80 75 90 0 180 0 195 0 255 300 255 300 210
+Circle -16777216 true false 180 210 90
+Circle -16777216 true false 30 210 90
+Polygon -16777216 true false 162 110 132 108 134 165 209 165 194 135 189 126 180 119
+Circle -7500403 true true 47 225 58
+Circle -7500403 true true 195 225 58
+
+push-car-rot
+true
+0
+Polygon -7500403 true true 300 210 279 194 261 174 240 165 226 162 213 136 203 114 185 93 159 80 135 80 75 90 0 180 0 195 0 255 300 255 300 210
+Circle -16777216 true false 180 210 90
+Circle -16777216 true false 30 210 90
+Polygon -16777216 true false 162 110 132 108 134 165 209 165 194 135 189 126 180 119
+Circle -7500403 true true 47 225 58
+Circle -7500403 true true 195 225 58
 
 pushing-left
 false
@@ -1112,6 +1194,22 @@ Polygon -1 true true 195 285 210 285 210 240 240 210 195 210
 Polygon -7500403 true false 276 85 285 105 302 99 294 83
 Polygon -7500403 true false 219 85 210 105 193 99 201 83
 
+sheep-rot
+true
+15
+Circle -1 true true 203 65 88
+Circle -1 true true 70 65 162
+Circle -1 true true 150 105 120
+Polygon -7500403 true false 218 120 240 165 255 165 278 120
+Circle -7500403 true false 214 72 67
+Rectangle -1 true true 164 223 179 298
+Polygon -1 true true 45 285 30 285 30 240 15 195 45 210
+Circle -1 true true 3 83 150
+Rectangle -1 true true 65 221 80 296
+Polygon -1 true true 195 285 210 285 210 240 240 210 195 210
+Polygon -7500403 true false 276 85 285 105 302 99 294 83
+Polygon -7500403 true false 219 85 210 105 193 99 201 83
+
 square
 false
 0
@@ -1125,6 +1223,11 @@ Rectangle -16777216 true false 60 60 240 240
 
 star
 false
+0
+Polygon -7500403 true true 151 1 185 108 298 108 207 175 242 282 151 216 59 282 94 175 3 108 116 108
+
+star-rot
+true
 0
 Polygon -7500403 true true 151 1 185 108 298 108 207 175 242 282 151 216 59 282 94 175 3 108 116 108
 
