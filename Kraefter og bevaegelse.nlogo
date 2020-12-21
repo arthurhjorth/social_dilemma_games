@@ -5,6 +5,7 @@ globals [
   push-force
   global-speed ;;for plotting @?
   global-d-speed
+
   win? ;;to see if they've won
   lost? ;;to see if they've lost (pushed the object over the edge)
 
@@ -27,6 +28,9 @@ globals [
   old-object-x ;;keeping track for mgraphics (mouse) purposes
   update-mgraphics?
   mouse-divisor
+  mouse-on-object?
+  mouse-pull-on?
+
 ]
 
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
@@ -49,6 +53,8 @@ objects-own [
   object-friction
   points
 
+  kinetisk-energi
+
   real-heading
   apparent-heading ;;only for fail animation
 ]
@@ -69,7 +75,6 @@ to setup
   set win? false set lost? false
   set timer-running? false
   set nr-of-pushes 0
-  ;;set energy start-energy ;;@
 
   set mouse-was-down? FALSE
 
@@ -91,9 +96,14 @@ to go
 
     if not lost? and not win? [
       accelerate-object
+      ask objects [set kinetisk-energi 0.5 * choose-mass * speed ^ 2] ;;kinetisk energi er en halv gange masse gange fart i anden ;;@CHANGE CHOOSE-MASS TO MASS OF OBJECT]
       check-win
       update-graphics
     ]
+
+    ;;ask objects [if resistance > 0 [print resistance]] ;;@to check how it gets too high, need to add failsafe in resistance reporter
+
+    ifelse mouse-xcor = object-x [set mouse-on-object? TRUE] [set mouse-on-object? FALSE] ;;@testing precision
 
     every 1 [tick] ;;@change the tick speed?
 
@@ -104,13 +114,21 @@ end
 to do-mouse-stuff
   if styring = "mus" [
 
-
   if not lost? and not win? and (old-mouse-x != mouse-xcor or old-object-x != object-x)
-    [ ask mgraphics [die] set update-mgraphics? TRUE ] ;;@update visuals only if mouse or object position has changed
+    [ ask mgraphics [die] set update-mgraphics? TRUE ] ;;update visuals only if mouse or object position has changed
 
   if update-mgraphics? [
 
-  if mouse-down? [
+      if [distance one-of objects <= 1] of patch (mouse-xcor) (mouse-ycor) [ ;;if the mouse is (roughly) on the object
+        set mouse-pull-on? TRUE ;;this remains true until the mouse button is lifted (see next if-statement)
+        ]
+
+      if [distance one-of objects > 1] of patch (mouse-xcor) (mouse-ycor) and not mouse-down? [ ;;if mouse is not on object AND mouse button isn't pressed
+        set mouse-pull-on? FALSE
+      ]
+
+
+  if mouse-down? and mouse-pull-on? [ ;;if the mouse is pressed down while on the object, start the elastic!
     if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
     set timer-running? TRUE
 
@@ -182,6 +200,7 @@ to accelerate-object
     ;; + skubbekraften
    set d-speed d-speed + push-force ;;push-force is positive if going right, negative if going left
 
+
     set global-d-speed d-speed
 
     ;; - resistance. The resistance depends on the speed (see the resistance reporter)
@@ -190,7 +209,7 @@ to accelerate-object
     if speed > 0 [set d-speed d-speed - resistance] ;;if currently going right, resistance towards left
     if speed < 0 [set d-speed d-speed + resistance] ;;if currently going left, resistance towards right
 
-;;print word "d-speed :" d-speed
+;;if d-speed > 0 [print word "d-speed :" d-speed]
 
     ;;add the acceleration vector to the speed
     set old-speed speed ;;the previous speed
@@ -230,7 +249,15 @@ end
 
 
 to-report resistance
-  report speed ^ 2 / resistance-divisor ;;@now fixed, should change
+  let modstand-used modstand / 10
+  if season = "summer" [
+    report speed ^ 2 / (1 / (modstand-used)) ;;the higher modstand, the higher resistance
+    ;;@add failsafe here, sometimes the number can still get too high for NetLogo!
+  ]
+  if season = "winter" [
+    report 0
+  ]
+
 end
 
 
@@ -241,7 +268,10 @@ to check-win
       let the-object one-of objects-here
       if the-object != nobody [
         if [speed < 0.03] of the-object [ ;;@ can change accuracy needed to win
-          set win? TRUE
+
+
+          if styring = "mus" and not mouse-down? [set win? TRUE] ;;kan kun vinde, når museknappen løftes
+          if styring = "tastatur" [set win? TRUE]
         ]
       ]
   ]
@@ -362,7 +392,6 @@ to fail-animation ;;what happens when the object gets pushed over the edge
 end
 
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;;;MOVING THE PLAYER;;;
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -417,9 +446,6 @@ to move-right
   set push-force push-force + push
 
   set nr-of-pushes nr-of-pushes + 1
-
-
-
   ;;check-object
 end
 
@@ -455,7 +481,7 @@ to make-world
   ]
 
    create-houses 1 [ ;;the house
-    set shape "house"
+    ifelse season = "winter" [set shape "house-snow"] [set shape "house"]
     set color 24
     set size 3
     setxy (max-pxcor - 13) 0
@@ -531,7 +557,6 @@ to-report show-timer
     report "Spillet kører ikke endnu"
   ]
 end
-
 
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -630,23 +655,12 @@ NIL
 1
 
 INPUTBOX
-1305
-220
-1380
-280
+1105
+185
+1180
+245
 choose-mass
-2.0
-1
-0
-Number
-
-INPUTBOX
-1380
-220
-1440
-280
-gravity
-9.8
+10.0
 1
 0
 Number
@@ -772,17 +786,6 @@ push-force
 1
 11
 
-INPUTBOX
-60
-70
-155
-130
-resistance-divisor
-10.0
-1
-0
-Number
-
 MONITOR
 960
 100
@@ -801,7 +804,7 @@ CHOOSER
 275
 level
 level
-"1 - sheep" "2 - car" "3 - something"
+"1 - sheep" "2 - car"
 0
 
 BUTTON
@@ -888,7 +891,53 @@ CHOOSER
 styring
 styring
 "mus" "tastatur"
-0
+1
+
+SLIDER
+40
+75
+185
+108
+modstand
+modstand
+0.1
+5
+1.0
+.1
+1
+NIL
+HORIZONTAL
+
+TEXTBOX
+35
+110
+215
+136
+modstand kun hvis det er sommer
+11
+0.0
+1
+
+MONITOR
+1250
+175
+1430
+220
+Kinetisk energi
+[kinetisk-energi] of one-of objects
+17
+1
+11
+
+TEXTBOX
+1240
+220
+1450
+246
+kinetisk energi = 0.5 * mass * velocity^2
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1076,6 +1125,28 @@ Rectangle -7500403 true true 45 120 255 285
 Rectangle -16777216 true false 120 210 180 285
 Polygon -7500403 true true 15 120 150 15 285 120
 Line -16777216 false 30 120 270 120
+
+house-snow
+false
+0
+Rectangle -7500403 true true 45 120 255 285
+Rectangle -16777216 true false 120 210 180 285
+Polygon -1 true false 15 120 150 15 285 120
+Line -16777216 false 30 120 270 120
+Polygon -7500403 true true 15 120 285 120 225 75 75 75 15 120
+Polygon -1 true false 120 60 75 90 105 105 120 120 135 105 150 90 150 60 135 45 120 45
+Polygon -1 true false 165 45 135 75 165 105 180 105 195 105 225 90 195 60 180 60 180 45
+Polygon -1 true false 105 45 30 105 60 120 75 105 75 105 105 75 150 60 135 45 150 15
+Polygon -1 true false 195 45 270 105 240 120 225 105 225 105 195 75 150 60 165 45 150 15
+Circle -1 true false 165 90 30
+Circle -1 true false 135 75 30
+Circle -1 true false 105 90 30
+Circle -1 true false 60 75 30
+Circle -1 true false 45 90 30
+Circle -1 true false 225 90 30
+Circle -1 true false 210 75 30
+Circle -1 true false 75 75 30
+Circle -1 true false 195 75 30
 
 leaf
 false
