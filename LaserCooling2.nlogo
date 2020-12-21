@@ -616,7 +616,6 @@ end
 
 
 
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 200
@@ -647,9 +646,9 @@ ticks
 
 BUTTON
 15
-110
+75
 101
-143
+108
 go/stop
 go
 T
@@ -664,9 +663,9 @@ NIL
 
 BUTTON
 15
-77
+42
 190
-110
+75
 NIL
 setup
 NIL
@@ -681,9 +680,9 @@ NIL
 
 SLIDER
 14
-42
+7
 189
-75
+40
 number-of-particles
 number-of-particles
 1
@@ -696,9 +695,9 @@ HORIZONTAL
 
 BUTTON
 100
-110
+75
 190
-143
+108
 go once
 go
 NIL
@@ -729,16 +728,16 @@ HORIZONTAL
 SLIDER
 10
 179
-190
+202
 212
 laser-frequency
 laser-frequency
--50
-50
+-5000
+5000
 0.0
+100
 1
-1
-NIL
+MHz
 HORIZONTAL
 
 SLIDER
@@ -914,10 +913,10 @@ PENS
 "default" 1.0 1 -16777216 true "" "histogram [speed] of particles"
 
 TEXTBOX
-15
-160
-165
-178
+45
+140
+195
+158
 Laser Parameters
 11
 0.0
@@ -1036,6 +1035,26 @@ particle-delta-e
 17
 1
 11
+
+TEXTBOX
+5
+165
+65
+183
+Blåtuning
+12
+0.0
+1
+
+TEXTBOX
+135
+165
+200
+183
+Rødtuning
+12
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
