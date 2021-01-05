@@ -187,7 +187,6 @@ to do-mouse-stuff
 end
 
 
-
 ;;accelerationsvektor (+ hvis spilleren skubber) m/s^2
 ;;fartvektor
 ;;hvert tick: læg acc-vek til fart-vek, bevæg spilleren (objektet) ift bevægelsesvektoren
@@ -197,13 +196,13 @@ to accelerate-object
     ;;calculate the acceleration vector (d-speed)
 
 ;;print word "push-force: " push-force
-    ;; + skubbekraften
+    ;; plus skubbekraften
    set d-speed d-speed + push-force ;;push-force is positive if going right, negative if going left
+   set d-speed choose-mass * d-speed ;;@ADD MASS, also to resistance?
 
+   set global-d-speed d-speed
 
-    set global-d-speed d-speed
-
-    ;; - resistance. The resistance depends on the speed (see the resistance reporter)
+    ;; minus resistance. The resistance depends on the speed (see the resistance reporter)
         ;;modstanden er proportionel med kvadratet på hastigheden (hvis man fordobler hastigheden, firedobler man modstanden)
 
     if speed > 0 [set d-speed d-speed - resistance] ;;if currently going right, resistance towards left
@@ -252,7 +251,7 @@ to-report resistance
   let modstand-used modstand / 10
   if season = "summer" [
     report speed ^ 2 / (1 / (modstand-used)) ;;the higher modstand, the higher resistance
-    ;;@add failsafe here, sometimes the number can still get too high for NetLogo!
+    ;;@add failsafe here, sometimes the number can still get too high for NetLogo (?)
   ]
   if season = "winter" [
     report 0
@@ -557,7 +556,6 @@ to-report show-timer
     report "Spillet kører ikke endnu"
   ]
 end
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
@@ -660,7 +658,7 @@ INPUTBOX
 1180
 245
 choose-mass
-10.0
+5.0
 1
 0
 Number
@@ -694,17 +692,6 @@ MONITOR
 495
 current object speed
 min [speed] of objects
-17
-1
-11
-
-MONITOR
-50
-495
-190
-540
-NIL
-min [d-speed] of objects
 17
 1
 11
@@ -938,6 +925,17 @@ kinetisk energi = 0.5 * mass * velocity^2
 11
 0.0
 1
+
+MONITOR
+585
+515
+642
+560
+NIL
+arbejde
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?

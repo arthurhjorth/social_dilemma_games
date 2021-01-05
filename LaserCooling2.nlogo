@@ -615,7 +615,6 @@ end
 
 
 
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 200
@@ -913,10 +912,10 @@ PENS
 "default" 1.0 1 -16777216 true "" "histogram [speed] of particles"
 
 TEXTBOX
-45
-140
-195
-158
+60
+145
+210
+163
 Laser Parameters
 11
 0.0
@@ -1037,9 +1036,9 @@ particle-delta-e
 11
 
 TEXTBOX
-5
+150
 165
-65
+210
 183
 Blåtuning
 12
@@ -1047,9 +1046,9 @@ Blåtuning
 1
 
 TEXTBOX
-135
+10
 165
-200
+75
 183
 Rødtuning
 12
