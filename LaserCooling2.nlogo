@@ -157,17 +157,21 @@ to make-lasers ;;in setup
     set photons-here-list []
   ] ;;default values for non-laser patches
 
-  ask patches with [(abs pxcor <= 4 and abs pycor < max-pycor) or abs pycor <= 4 and abs pxcor < max-pxcor] [ ;;the laser patches
-    set pcolor scale-color red laser-frequency -80 80 ;;tones of red depending on frequency @change numbers
+  ask patches with [(abs pxcor <= 12 and abs pycor < max-pycor) or abs pycor <= 12 and abs pxcor < max-pxcor] [ ;;the laser patches
     set laser-patch? TRUE
 
-    if abs pxcor <= 4 [
+    ifelse laser-detuning < 0 ;;change laser color depending on frequency (detuned = red)
+        [set pcolor scale-color red laser-detuning -7500 0]
+        [set pcolor scale-color blue laser-detuning 7500 0]
+    if laser-detuning = 0 [set pcolor white]
+
+    if abs pxcor <= 12 [
       set photon-0? TRUE ;;bottom laser shooting upwards
       set photon-180? TRUE ;;top laser shooting downwards
       set photons-here-list lput 0 photons-here-list
       set photons-here-list lput 180 photons-here-list
     ]
-    if abs pycor <= 4 [
+    if abs pycor <= 12 [
       set photon-90? TRUE ;;left laser shooting right
       set photon-270? TRUE ;;right laser shooting left
       set photons-here-list lput 90 photons-here-list
@@ -290,13 +294,13 @@ to-report resonance? ;;particle procedure
     report (list true photons-here-list) ;;here item 1 is a nested list containing the headings of the photons on the patch
   ]
 
+  ;;@DO RESONANCE CALCULATIONS HERE - NOTHING YET - NOW RESONANCE EVERY TIME
 
-  ;;@DO RESONANCE CALCULATIONS HERE
 
-  ;;two approaches, right now patches have:
+
+  ;;two approaches, maybe useful for calculations? patches now have:
     ;;photons-here-list (containing headings of the photons on that patch)
     ;;and booleans: photon-90?, photon-180? and so on
-
 
 
   ;;--- EARLIER RESONANCE CALCULATIONS (with photon agents) ---
@@ -614,7 +618,6 @@ end
 
 
 
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 200
@@ -686,7 +689,7 @@ number-of-particles
 number-of-particles
 1
 1000
-7.0
+8.0
 1
 1
 NIL
@@ -729,8 +732,8 @@ SLIDER
 179
 202
 212
-laser-frequency
-laser-frequency
+laser-detuning
+laser-detuning
 -5000
 5000
 0.0
