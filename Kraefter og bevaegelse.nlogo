@@ -69,8 +69,11 @@ mgraphics-own [lifetime name]
 to setup
   clear-all
   set season "summer" ;;default season
-  make-world ;;considers cliff? true or false
+  make-world
   make-object ;;the one that's chosen
+
+
+  set object-x -26 ;;the object's starting position
 
   set win? false set lost? false
   set timer-running? false
@@ -169,7 +172,9 @@ to do-mouse-stuff
 
     ;;ADD THE ACCELERATION VECTOR BASED ON THE DISTANCE
 
-    set mouse-divisor scaling-mouse / mouse-dist ;;/ scaling-mouse ;;@ testing size of scaling-mouse in interface
+    let scaling-mouse 1000 ;;@ testing size of scaling-mouse
+
+    set mouse-divisor scaling-mouse / mouse-dist ;;/ scaling-mouse
 
     set mouse-acc (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
 
@@ -218,7 +223,8 @@ to accelerate-object
     set push-force 0 ;;reset the skubbekraft once it has been applied
     set d-speed 0 ;;reset the acceleration vector once it has been applied
 
-    if speed < lower-limit and speed > 0 [set speed 0] ;;to the right ;;@tweak this (otherwise it never quite reaches 0)
+    let lower-limit 0.05 ;;@can tweak this (since speed never quite reached 0)
+    if speed < lower-limit and speed > 0 [set speed 0] ;;to the right
     if speed > (- lower-limit) and speed < 0 [set speed 0] ;;to the left
 
     set speed precision speed 5 ;;@precision can be tweaked
@@ -284,8 +290,8 @@ to check-win
     ask objects [die]
     ask players [set shape "person-happy"]
     ask graphics [die] ask mgraphics [die] ;;to kill off any sparks and the elastic (if mouse control)
-    ask patch (max-pxcor - (max-pxcor / 2)) (max-pycor - 5) [set plabel (word "Nice! You took " (timer-at-end) " seconds and used " nr-of-pushes " pushes.") ]
-    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 8) [set plabel "Now onto the next thing!"]
+    ask patch (max-pxcor - (max-pxcor / 2) - 3) (max-pycor - 6) [set plabel (word "Sejt! Du brugte " (timer-at-end) " sekunder og " nr-of-pushes " skub.") ]
+    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 9) [set plabel "Fortsæt det gode arbejde!"]
 
     set timer-running? FALSE ;;so the timer can start over again with their next first push
     set global-speed 0 set global-d-speed 0
@@ -325,6 +331,7 @@ to check-object ;;to see if they've lost by pushing it over the edge (if there i
 
   if [pcolor = sky or pcolor = 94] of patch (object-x) (object-y - 2) [ ;;check if the patch below the object is sky
     set lost? TRUE
+    set global-speed 0 ;;for the plotting
 
     set timer-at-end precision timer 2 ;;save how long it took them to lose
     ;;ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if lost, freeze visual timer at end time
@@ -378,8 +385,8 @@ to fail-animation ;;what happens when the object gets pushed over the edge
     ]
     [ ;;if explosions are done
 
-    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 5) [set plabel (word "Oh no, the object fell over the edge!") ]
-    ask patch (max-pxcor - (max-pxcor / 2) - 13) (max-pycor - 8) [set plabel "Press 'p' to try again!"]
+    ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 6) [set plabel (word "Åh nej, objektet faldt ud over kanten!") ]
+    ask patch (max-pxcor - (max-pxcor / 2) - 9) (max-pycor - 9) [set plabel "Tryk på 'R' for at prøve igen!"]
 
       ;;user-message "You failed! :-( Try again!"
      ;;play-level ;;starts the level over
@@ -422,7 +429,7 @@ to move-left
   if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
   set timer-running? TRUE
 
-  set push-force (push-force - push) ;;pushing to the left means negative push-force in these calculations (negative speed = going to the left)
+  set push-force (push-force - skub) ;;pushing to the left means negative push-force in these calculations (negative speed = going to the left)
 
   set nr-of-pushes nr-of-pushes + 1
 
@@ -442,7 +449,7 @@ to move-right
   if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
   set timer-running? TRUE
 
-  set push-force push-force + push
+  set push-force push-force + skub
 
   set nr-of-pushes nr-of-pushes + 1
   ;;check-object
@@ -455,11 +462,16 @@ to make-world
   ask players [die]
   ask objects [die]
 
+  ifelse level = "testlevel 1" ;;add other cliff-less levels here
+    [set klippe? FALSE]
+    [set klippe? TRUE]
+
+
   if season = "summer" [
   ask patches [ ;;summer sky and grass
     ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor sky] [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;summer
   ]
-    if not cliff? [
+    if not klippe? [
       ask patches [
         if pycor <= -2 [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;if no cliff, extend the grass
       ]
@@ -471,7 +483,7 @@ to make-world
     ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor 94] [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ]
     if pycor < -1 and pycor > -3 and pxcor < (max-pxcor - 9) [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
   ]
-    if not cliff? [
+    if not klippe? [
       ask patches [
         if pycor <= -2 [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ] ;;if no cliff, extend the snow
         if pycor < -1 and pycor > -3 [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
@@ -503,19 +515,15 @@ to make-object
   ask explosions [die]
   set push-force 0
 
-  ask patch (max-pxcor - (max-pxcor / 2)) (max-pycor - 5) [set plabel ""] ;;the patches displaying the 'nice work!' after the previous completion
-  ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 8) [set plabel""]
+  ;;clear yay you won patches
+  ask patch (max-pxcor - (max-pxcor / 2) - 3) (max-pycor - 6) [set plabel ""]
+  ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 9) [set plabel ""]
 
-  if level = "1 - sheep" [
-  create-objects 1 [
-    set shape "sheep"
-    set color white
-    set size 3
-    setxy (min-pxcor + 4) 0
-    set heading 90 ;;so positive speed means going to the right, negative to the left
-    set mass choose-mass ;;@ADD fixed mass here
-    set points 100
-  ]]
+  ;;clear oh no you lost patches
+  ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 6) [set plabel "" ]
+  ask patch (max-pxcor - (max-pxcor / 2) - 9) (max-pycor - 9) [set plabel ""]
+
+
 
   if level = "2 - car" [
   create-objects 1 [
@@ -527,6 +535,35 @@ to make-object
     set mass choose-mass ;;@ADD fixed mass here
     set points 100
   ]]
+
+
+
+  if level = "testlevel 1" [
+    set klippe? FALSE ;;ingen afgrund
+    create-objects 1 [
+      set shape "sheep"
+      set color white
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set mass choose-mass ;;@ADD fixed mass here
+    ]
+  ]
+
+
+
+  if level = "testlevel 2" [
+    set klippe? TRUE ;;nu med afgrund (specified in make-world, not here (but kept here for overblik)
+    create-objects 1 [
+      set shape "sheep"
+      set color white
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set mass choose-mass ;;@ADD fixed mass here
+    ]
+  ]
+
 
   ;;@add more objects/levels here
 end
@@ -558,9 +595,9 @@ to-report show-timer
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-210
+220
 10
-950
+960
 511
 -1
 -1
@@ -585,11 +622,11 @@ ticks
 30.0
 
 BUTTON
-40
-190
-103
-223
-NIL
+45
+145
+115
+178
+Opsætning
 setup
 NIL
 1
@@ -602,11 +639,11 @@ NIL
 1
 
 BUTTON
-115
-190
+120
+145
+183
 178
-223
-NIL
+Spil
 go
 T
 1
@@ -619,11 +656,11 @@ NIL
 1
 
 BUTTON
-1305
-10
-1367
-43
-LEFT
+570
+515
+635
+548
+VENSTRE
 set action 1
 NIL
 1
@@ -636,11 +673,11 @@ NIL
 1
 
 BUTTON
-1370
-10
-1437
-43
-RIGHT
+640
+515
+705
+548
+HØJRE
 set action 2
 NIL
 1
@@ -653,10 +690,10 @@ NIL
 1
 
 INPUTBOX
-1105
-185
-1180
-245
+50
+455
+125
+515
 choose-mass
 5.0
 1
@@ -664,10 +701,10 @@ choose-mass
 Number
 
 MONITOR
-52
-405
-192
-450
+1060
+60
+1170
+105
 current resistance
 min [resistance] of objects
 17
@@ -676,32 +713,32 @@ min [resistance] of objects
 
 INPUTBOX
 50
-10
+390
 100
-70
-push
+450
+skub
 0.2
 1
 0
 Number
 
 MONITOR
-50
-450
-190
-495
-current object speed
+1060
+110
+1170
+155
+Objektets hastighed
 min [speed] of objects
 17
 1
 11
 
 BUTTON
-960
-10
-1025
-43
-winter
+15
+235
+70
+268
+Vinter
 set season \"winter\"\nmake-world\nmake-object
 NIL
 1
@@ -714,11 +751,11 @@ NIL
 1
 
 BUTTON
-960
-50
-1025
-83
-summer
+15
+265
+70
+298
+Sommer
 set season \"summer\"\nmake-world\nmake-object
 NIL
 1
@@ -735,7 +772,7 @@ PLOT
 285
 1460
 510
-plot 1
+Objektets hastighed
 NIL
 NIL
 0.0
@@ -743,79 +780,43 @@ NIL
 0.0
 0.4
 true
-true
+false
 "" ""
 PENS
-"speed" 1.0 0 -8053223 true "" "plot global-speed"
-"delta-speed" 1.0 0 -1184463 true "" "plot global-d-speed"
-"push-force" 1.0 0 -13840069 true "" "plot push-force"
-"0" 1.0 0 -7500403 true "" "plot 0"
-
-INPUTBOX
-110
-10
-175
-70
-lower-limit
-0.05
-1
-0
-Number
-
-MONITOR
-120
-360
-192
-405
-NIL
-push-force
-17
-1
-11
-
-MONITOR
-960
-100
-1017
-145
-NIL
-score
-17
-1
-11
+"Absolut hastighed" 1.0 0 -2674135 true "" "plot abs global-speed"
 
 CHOOSER
-30
-230
-122
-275
+70
+95
+162
+140
 level
 level
-"1 - sheep" "2 - car"
-0
+"testlevel 1" "testlevel 2" "2 - car"
+1
 
 BUTTON
-130
-230
-190
-275
-NIL
+90
+185
+150
+220
+Genstart
 play-level
 NIL
 1
 T
 OBSERVER
 NIL
-P
+R
 NIL
 NIL
 1
 
 SLIDER
-1075
-15
-1247
-48
+260
+530
+432
+563
 hastighed
 hastighed
 1
@@ -827,69 +828,58 @@ hastighed
 HORIZONTAL
 
 MONITOR
-1065
-105
-1285
-150
-NIL
+980
+215
+1115
+260
+Timer
 show-timer
 17
 1
 11
 
 MONITOR
-960
-170
-1035
-215
-NIL
+980
+160
+1045
+205
+Antal skub
 nr-of-pushes
 17
 1
 11
 
-INPUTBOX
-85
-285
-180
-345
-scaling-mouse
-1000.0
-1
-0
-Number
-
 SWITCH
-15
-145
-105
-178
-cliff?
-cliff?
+25
+30
+115
+63
+klippe?
+klippe?
 0
 1
 -1000
 
 CHOOSER
-110
-140
-202
-185
+120
+30
+212
+75
 styring
 styring
 "mus" "tastatur"
 1
 
 SLIDER
-40
-75
-185
-108
+50
+355
+195
+388
 modstand
 modstand
 0.1
 5
-1.0
+1.5
 .1
 1
 NIL
@@ -897,19 +887,19 @@ HORIZONTAL
 
 TEXTBOX
 35
-110
-215
-136
+340
+200
+366
 modstand kun hvis det er sommer
 11
 0.0
 1
 
 MONITOR
-1250
-175
-1430
-220
+1235
+185
+1415
+230
 Kinetisk energi
 [kinetisk-energi] of one-of objects
 17
@@ -917,25 +907,75 @@ Kinetisk energi
 11
 
 TEXTBOX
-1240
-220
-1450
-246
+1225
+230
+1435
+256
 kinetisk energi = 0.5 * mass * velocity^2
 11
 0.0
 1
 
 MONITOR
-585
-515
-642
-560
-NIL
-arbejde
-17
+1060
+160
+1170
+205
+Bevægelsesafstand
+object-x + 26
+2
 1
 11
+
+TEXTBOX
+310
+515
+395
+533
+Spillets hastighed
+11
+0.0
+1
+
+TEXTBOX
+515
+555
+775
+586
+Tryk på \"J\" og \"L\" piletasterne for at styre
+14
+0.0
+1
+
+TEXTBOX
+105
+410
+175
+461
+størrelsen på skubbet
+11
+0.0
+1
+
+TEXTBOX
+130
+475
+200
+516
+objektets masse
+11
+0.0
+1
+
+TEXTBOX
+110
+315
+155
+333
+TESTER:
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
