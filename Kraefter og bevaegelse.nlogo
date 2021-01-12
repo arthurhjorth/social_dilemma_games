@@ -18,6 +18,9 @@ globals [
   timer-at-end ;;timer at time of win/deaths
 
   nr-of-pushes
+  distance-flyttet
+
+
 
   energy ;;the player's energy (keeping it in a global variable for now) @change this?
 
@@ -30,6 +33,21 @@ globals [
   mouse-divisor
   mouse-on-object?
   mouse-pull-on?
+
+  try-nr ;;@not used now ;;a nr starting at 0, goes up after each fail/win, used to name the list of saved values after each try
+  save-list ;;the list storing saved values after each go
+
+
+  a ;;acceleration
+  v ;;velocity
+  delta-v ;;velocity after friction is subtracted
+  friktion ;;friktion
+  s ;;displacement
+  u ;;initial/current speed
+  final-displacement ;;after scaling
+
+  prev-push-force
+  time-pushed
 
 ]
 
@@ -67,7 +85,12 @@ mgraphics-own [lifetime name]
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to setup
-  clear-all
+  clear-all ;;but don't want to clear the global 'try-nr'?
+  ;;clear-all-plots clear-ticks clear-turtles clear-patches clear-drawing clear-output ;;everything from clear-all except clear-globals (want to keep try-nr)
+
+
+
+  set save-list []
   set season "summer" ;;default season
   make-world
   make-object ;;the one that's chosen
@@ -78,6 +101,7 @@ to setup
   set win? false set lost? false
   set timer-running? false
   set nr-of-pushes 0
+  set distance-flyttet 0
 
   set mouse-was-down? FALSE
 
@@ -99,7 +123,7 @@ to go
 
     if not lost? and not win? [
       accelerate-object
-      ask objects [set kinetisk-energi 0.5 * choose-mass * speed ^ 2] ;;kinetisk energi er en halv gange masse gange fart i anden ;;@CHANGE CHOOSE-MASS TO MASS OF OBJECT]
+      ask objects [set kinetisk-energi 0.5 * choose-mass * delta-v ^ 2] ;;kinetisk energi er en halv gange masse gange fart i anden
       check-win
       update-graphics
     ]
@@ -108,7 +132,7 @@ to go
 
     ifelse mouse-xcor = object-x [set mouse-on-object? TRUE] [set mouse-on-object? FALSE] ;;@testing precision
 
-    every 1 [tick] ;;@change the tick speed?
+    tick
 
   ]
 end
@@ -192,54 +216,117 @@ to do-mouse-stuff
 end
 
 
-;;accelerationsvektor (+ hvis spilleren skubber) m/s^2
-;;fartvektor
-;;hvert tick: læg acc-vek til fart-vek, bevæg spilleren (objektet) ift bevægelsesvektoren
 
 to accelerate-object
   ask objects [
-    ;;calculate the acceleration vector (d-speed)
 
-;;print word "push-force: " push-force
-    ;; plus skubbekraften
-   set d-speed d-speed + push-force ;;push-force is positive if going right, negative if going left
-   set d-speed choose-mass * d-speed ;;@ADD MASS, also to resistance?
+  ;;tag højde for om de skubber over længere tid end bare et tick:
+  ifelse push-force = prev-push-force
+	   [set time-pushed time-pushed + tick-i-sekunder] ;;hvor mange sekunder de har skubbet med denne kraft (increasing if they hold down the key)
+     [set time-pushed tick-i-sekunder] ;;hvis de ikke holder inde over længere tid
 
-   set global-d-speed d-speed
+if push-force != 0 [print "" print word "time pushed: " time-pushed print word "push-force: " push-force
+    output-print "" output-print word "time pushed: " time-pushed output-print word "push-force: " push-force
+    ] ;;@for testing only
+    ;;push-force = skubbekraften i Newton (positiv = mod højre, negativ = mod venstre)
 
-    ;; minus resistance. The resistance depends on the speed (see the resistance reporter)
-        ;;modstanden er proportionel med kvadratet på hastigheden (hvis man fordobler hastigheden, firedobler man modstanden)
+;;1. Calculate acceleration
+   if styring = "tastatur" [
+      ifelse push-force = 0 [
+        set a 0 ;;no acceleration if no push this tick
+      ]
+     [
+      set a push-force / choose-mass ;a = F/m ;;acceleration = Force / mass ;;push-force positive if going right, negative if going left ;;@acceleration can be 'negative' (to the left)
+      ]
+    ]
 
-    if speed > 0 [set d-speed d-speed - resistance] ;;if currently going right, resistance towards left
-    if speed < 0 [set d-speed d-speed + resistance] ;;if currently going left, resistance towards right
+if a != 0 [print word "acceleration: " a output-print word "acceleration: " a] ;;@for testing only
 
-;;if d-speed > 0 [print word "d-speed :" d-speed]
 
-    ;;add the acceleration vector to the speed
-    set old-speed speed ;;the previous speed
+;;2. Calculate new velocity
+    set u [speed] of one-of objects ;;u = initial/current speed ;;(only ever one object at a time)
 
-    set speed speed + d-speed ;;d-speed is the resulting force/acceleration vector of all the factors
+    set v u + ( a * time-pushed )  ;;v = u + a*t ;;velociy = initial speed + acceleration * time force is applied
 
+    ;;MEN PGA t:
+    ;;@^^så bliver det vel afgørende, hvor fine grained vi er/hvor tit vi tjekker Newton applied?! ;;skal det ændres, så hvis de holder inde, ændres t...?
+
+         ;;if no acceleration, v = u (new speed = initial speed)
+         ;;@velocity can be 'negative' (to the left)
+
+if v != 0 [print word "velocity: " v output-print word "velocity: " v] ;;@for testing only
+
+
+;;3. Calculate friction
+    ifelse season = "summer"
+      [set friktion gnidnings-kof * normalkraft] ;;friktion = my * normalkraft ;;enhed: Newton
+      [set friktion 0]
+
+
+;;if v != 0 [print word "friktion: " friktion output-print word "friktion: " friktion]
+
+    ;;@hvad med forskellen på statisk og dynamisk friktion? ;;to forskellige gnidningskoefficienter?!
+
+    set delta-v v ;;for the case where there's no friction (delta-v used in step 4)
+
+
+    ;;@SKUBBET SKAL FØRST STARTE, HVIS DENNE FRIKTIONS-VEKTOR OVERKOMMES
+    ;;@^^så bliver det vel afgørende, hvor fine grained vi er/hvor tit vi tjekker Newton applied?! ;;skal det ændres, så hvis de holder inde, ændres t...?
+
+    ifelse abs delta-v > friktion [ ;;hvis skubbekraften overstiger friktionskraften
+    if v > 0 [set delta-v (v - friktion)] ;;if currently going right, friction towards left
+    if v < 0 [set delta-v (v + friktion)] ;;if currently going left, friction towards right
+    ]
+    [
+    set delta-v 0 ;;hvis skubbekraften IKKE overstiger friktionskraften
+    ]
+
+
+;;4. Calculate displacement
+    ifelse a = 0 [
+      set s delta-v * time-pushed ;;displacement = velocity * time (if no acceleration) ;;delta-v = velocity after friction is subtracted
+    ]
+    [
+     ;;Calculate displacement given initial and final speeds ;;@MAYBE DON'T NEED THIS?! DO THIS? OR SIMPLY CALCULATE NEW VELOCITY, THEN DO s = v*t?
+    ;;s = 1/2 * (u + v) * t ;;displacement = 1/2 * (initial speed + final speed) * time force is applied
+    set s 0.5 * (u + delta-v) * time-pushed
+
+if s > 0 [print word "s (displacement): " s output-print word "s (displacement): " s] ;;@for testing only
+
+    ] ;;end of if a != 0
+
+
+;;5. Move the object!
+    set final-displacement s * patch-i-meter ;;s is displacement in meters ;;@right now without friction
+
+if final-displacement > 0 [print word "final-displacement: " final-displacement output-print word "final-displacement: " final-displacement] ;;@for testing only
+
+    forward final-displacement
+
+
+    set distance-flyttet distance-flyttet + abs final-displacement
+    set final-displacement 0 ;;@?
+
+
+;;6. Reset/update variables
+    set speed delta-v ;;the new calculated velocity (with friction subtracted), saved to object variable (and used as u in calculations next tick)
+    set old-speed speed ;;the previous speed ;;object variable
+
+    set prev-push-force push-force ;;save this push-force for next tick (to check if they keep holding it down)
     set push-force 0 ;;reset the skubbekraft once it has been applied
-    set d-speed 0 ;;reset the acceleration vector once it has been applied
 
     let lower-limit 0.05 ;;@can tweak this (since speed never quite reached 0)
     if speed < lower-limit and speed > 0 [set speed 0] ;;to the right
     if speed > (- lower-limit) and speed < 0 [set speed 0] ;;to the left
 
     set speed precision speed 5 ;;@precision can be tweaked
-
     set global-speed speed ;;plots continuously
     ;;if old-speed != speed [set global-speed speed] ;;for plotting only when the speed changes @?
-  ]
 
-  ;;and now move!
-  ask objects [
-    forward speed ;;'forward' means to the right (90) if positive number and to the left if negative
-;; if speed > 0 [print word "speed: " speed]
-    ]
+    ] ;;END OF ASK OBJECTS
 
- ;;SPARKS
+
+ ;;SPARKS animation
   if count objects > 0 and not lost? and object-y > min-pycor + 2 [ ask patch (object-x) (object-y - 2) [
     if (global-speed > 0 or global-speed < 0) and season != "winter" [ ;;only if the object is moving and it's not winter (ice = 'no' friction)
 
@@ -253,18 +340,28 @@ to accelerate-object
 end
 
 
-to-report resistance
-  let modstand-used modstand / 10
-  if season = "summer" [
-    report speed ^ 2 / (1 / (modstand-used)) ;;the higher modstand, the higher resistance
-    ;;@add failsafe here, sometimes the number can still get too high for NetLogo (?)
-  ]
-  if season = "winter" [
-    report 0
-  ]
-
+;;--------BEREGNINGER AF FYSISKE STØRRELSER
+to-report normalkraft
+  report choose-mass * g ;;præcis ligesom tyngdekraften - men i modsat retning!
 end
+;;----------
 
+
+;;to-report resistance ;;@substitute this with gnidningsmodstand?
+  ;; minus resistance. The resistance depends on the speed (see the resistance reporter) ;;ACTUALLY SHOULDN'T DEPEND ON SPEED ?!
+        ;;modstanden er proportionel med kvadratet på hastigheden (hvis man fordobler hastigheden, firedobler man modstanden) (?!)
+
+  ;;let modstand-used modstand / 10
+  ;;if season = "summer" [
+    ;;report speed ^ 2 / (1 / (modstand-used)) ;;the higher modstand, the higher resistance
+    ;;@add failsafe here, sometimes the number can still get too high for NetLogo (?)
+  ;;]
+  ;;if season = "winter" [
+    ;;report 0
+  ;;]
+;;end
+
+;;----------
 
 to check-win
   ask houses [
@@ -284,6 +381,9 @@ to check-win
 
   if win? [
     set timer-at-end precision timer 2 ;;save how long it took them to win
+
+    make-save-list ;;save all the values from this go
+
     ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if won, freeze visual timer at end time
     set last-score score
     set score score + 1
@@ -295,6 +395,7 @@ to check-win
 
     set timer-running? FALSE ;;so the timer can start over again with their next first push
     set global-speed 0 set global-d-speed 0
+    set try-nr try-nr + 1 ;;value that records the nr of finished trys
   ]
 end
 
@@ -332,8 +433,12 @@ to check-object ;;to see if they've lost by pushing it over the edge (if there i
   if [pcolor = sky or pcolor = 94] of patch (object-x) (object-y - 2) [ ;;check if the patch below the object is sky
     set lost? TRUE
     set global-speed 0 ;;for the plotting
+    set try-nr try-nr + 1 ;;value that records the nr of finished trys
 
     set timer-at-end precision timer 2 ;;save how long it took them to lose
+
+    make-save-list ;;save all the values from this go
+
     ;;ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if lost, freeze visual timer at end time
     set timer-running? FALSE
 
@@ -389,13 +494,26 @@ to fail-animation ;;what happens when the object gets pushed over the edge
     ask patch (max-pxcor - (max-pxcor / 2) - 9) (max-pycor - 9) [set plabel "Tryk på 'R' for at prøve igen!"]
 
       ;;user-message "You failed! :-( Try again!"
-     ;;play-level ;;starts the level over
+     ;;genstart ;;starts the level over
     ]
   ]
-
-
-
 end
+
+
+
+;;SAVING THE VALUES
+
+to make-save-list
+  ;;set save-list [] ;;@now overwritten after each go (if we've already sent previous lists to a server or something)? Or should all gos be saved?
+  ;;set save-list lput (list "time" timer-at-end) save-list ;;nested list? (first = variable, second = value)
+
+  set save-list lput (list level choose-mass skub nr-of-pushes distance-flyttet gnidnings-kof timer-at-end) save-list
+    ;;level, objektets masse, kraft i hvert skub, antal skub, total distance, gnidningskoefficient, tid
+
+  print save-list
+  output-print save-list
+end
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -568,7 +686,7 @@ to make-object
   ;;@add more objects/levels here
 end
 
-to play-level
+to genstart
   ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 5) [set plabel "" ]
   ask patch (max-pxcor - (max-pxcor / 2) - 13) (max-pycor - 8) [set plabel ""]
 
@@ -578,6 +696,7 @@ to play-level
   set push-force 0
   ask objects [set speed 0]
   set nr-of-pushes 0 ;;@could save a total nr of pushes across levels?
+  set distance-flyttet 0 ;;@igen: could save cumulative across levels
   set timer-running? FALSE ;;so the timer can start over again with their first push
 
 end
@@ -623,9 +742,9 @@ ticks
 
 BUTTON
 45
-145
+125
 115
-178
+158
 Opsætning
 setup
 NIL
@@ -640,9 +759,9 @@ NIL
 
 BUTTON
 120
-145
+125
 183
-178
+158
 Spil
 go
 T
@@ -656,10 +775,10 @@ NIL
 1
 
 BUTTON
-570
-515
-635
-548
+850
+520
+915
+553
 VENSTRE
 set action 1
 NIL
@@ -673,10 +792,10 @@ NIL
 1
 
 BUTTON
-640
-515
-705
-548
+920
+520
+985
+553
 HØJRE
 set action 2
 NIL
@@ -690,43 +809,32 @@ NIL
 1
 
 INPUTBOX
-50
-455
-125
-515
+215
+520
+290
+580
 choose-mass
-5.0
+1.0
 1
 0
 Number
-
-MONITOR
-1060
-60
-1170
-105
-current resistance
-min [resistance] of objects
-17
-1
-11
 
 INPUTBOX
 50
-390
+275
 100
-450
+335
 skub
-0.2
+20.0
 1
 0
 Number
 
 MONITOR
 1060
-110
+70
 1170
-155
+115
 Objektets hastighed
 min [speed] of objects
 17
@@ -734,10 +842,10 @@ min [speed] of objects
 11
 
 BUTTON
-15
-235
-70
-268
+970
+10
+1025
+43
 Vinter
 set season \"winter\"\nmake-world\nmake-object
 NIL
@@ -751,10 +859,10 @@ NIL
 1
 
 BUTTON
-15
-265
-70
-298
+970
+40
+1025
+73
 Sommer
 set season \"summer\"\nmake-world\nmake-object
 NIL
@@ -787,21 +895,21 @@ PENS
 
 CHOOSER
 70
-95
+75
 162
-140
+120
 level
 level
 "testlevel 1" "testlevel 2" "2 - car"
-1
+0
 
 BUTTON
 90
-185
+165
 150
-220
+200
 Genstart
-play-level
+genstart
 NIL
 1
 T
@@ -813,15 +921,15 @@ NIL
 1
 
 SLIDER
-260
-530
-432
-563
+540
+535
+712
+568
 hastighed
 hastighed
 1
 100
-82.0
+53.0
 1
 1
 %
@@ -851,20 +959,20 @@ nr-of-pushes
 
 SWITCH
 25
-30
+10
 115
-63
+43
 klippe?
 klippe?
-0
+1
 1
 -1000
 
 CHOOSER
 120
-30
+10
 212
-75
+55
 styring
 styring
 "mus" "tastatur"
@@ -872,9 +980,9 @@ styring
 
 SLIDER
 50
-355
+240
 195
-388
+273
 modstand
 modstand
 0.1
@@ -887,40 +995,40 @@ HORIZONTAL
 
 TEXTBOX
 35
-340
+225
 200
-366
+251
 modstand kun hvis det er sommer
 11
 0.0
 1
 
 MONITOR
-1235
-185
-1415
-230
+1240
+215
+1420
+260
 Kinetisk energi
-[kinetisk-energi] of one-of objects
+min [kinetisk-energi] of objects
 17
 1
 11
 
 TEXTBOX
-1225
-230
-1435
-256
+1230
+265
+1440
+291
 kinetisk energi = 0.5 * mass * velocity^2
 11
 0.0
 1
 
 MONITOR
-1060
-160
-1170
-205
+425
+560
+535
+605
 Bevægelsesafstand
 object-x + 26
 2
@@ -928,20 +1036,20 @@ object-x + 26
 11
 
 TEXTBOX
-310
-515
-395
-533
+590
+520
+675
+538
 Spillets hastighed
 11
 0.0
 1
 
 TEXTBOX
-515
-555
-775
-586
+795
+560
+1055
+591
 Tryk på \"J\" og \"L\" piletasterne for at styre
 14
 0.0
@@ -949,33 +1057,180 @@ Tryk på \"J\" og \"L\" piletasterne for at styre
 
 TEXTBOX
 105
-410
+295
 175
-461
-størrelsen på skubbet
+346
+størrelsen på skubbet (i N)
 11
 0.0
 1
 
 TEXTBOX
-130
-475
-200
-516
-objektets masse
+225
+580
+295
+621
+objektets masse (i kg)
 11
 0.0
 1
 
 TEXTBOX
 110
-315
+215
 155
-333
+233
 TESTER:
 11
 0.0
 1
+
+INPUTBOX
+30
+415
+105
+475
+g
+9.82
+1
+0
+Number
+
+INPUTBOX
+115
+415
+190
+475
+gnidnings-kof
+0.36
+1
+0
+Number
+
+TEXTBOX
+120
+475
+215
+516
+my = ca 0.36 for gummi mod græs (ingen enhed)
+11
+0.0
+1
+
+INPUTBOX
+25
+525
+105
+585
+patch-i-meter
+0.25
+1
+0
+Number
+
+INPUTBOX
+115
+525
+195
+585
+tick-i-sekunder
+1.0
+1
+0
+Number
+
+TEXTBOX
+40
+480
+120
+506
+(m / s^2)
+11
+0.0
+1
+
+MONITOR
+430
+515
+527
+560
+afstand-i-meter
+(object-x + 26) * patch-i-meter
+17
+1
+11
+
+TEXTBOX
+65
+375
+215
+393
+joule = Newton * meter
+11
+0.0
+1
+
+MONITOR
+985
+100
+1042
+145
+NIL
+try-nr
+17
+1
+11
+
+MONITOR
+1060
+115
+1117
+160
+NIL
+a
+17
+1
+11
+
+MONITOR
+1115
+115
+1172
+160
+NIL
+s
+17
+1
+11
+
+MONITOR
+350
+525
+407
+570
+NIL
+friktion
+17
+1
+11
+
+MONITOR
+1065
+160
+1162
+205
+NIL
+distance-flyttet
+17
+1
+11
+
+OUTPUT
+1180
+10
+1495
+175
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
