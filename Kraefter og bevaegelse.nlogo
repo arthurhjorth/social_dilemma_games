@@ -3,6 +3,7 @@ globals [
   object-x ;;the object's current position
   object-y
   push-force
+  total-push-force
   global-speed ;;for plotting @?
   global-d-speed
 
@@ -12,7 +13,6 @@ globals [
   score
   last-score ;;for coding purposes, keeping track of the previous score (to see if it's changed)
   season
-  ;;cliff? ;;
   timer-running?
 
   timer-at-end ;;timer at time of win/deaths
@@ -66,10 +66,8 @@ players-own [
 objects-own [
   speed
   old-speed
-  d-speed
   mass
   object-friction
-  points
 
   kinetisk-energi
 
@@ -88,13 +86,10 @@ to setup
   clear-all ;;but don't want to clear the global 'try-nr'?
   ;;clear-all-plots clear-ticks clear-turtles clear-patches clear-drawing clear-output ;;everything from clear-all except clear-globals (want to keep try-nr)
 
-
-
   set save-list []
-  set season "summer" ;;default season
-  make-world
-  make-object ;;the one that's chosen
 
+  make-world ;;cliff and season also specified here
+  make-object ;;sets up the chosen level that's chosen
 
   set object-x -26 ;;the object's starting position
 
@@ -181,23 +176,19 @@ to do-mouse-stuff
     create-link-with turtle turtle-number [set thickness 0.5 set color yellow set mouse-dist link-length] ;;visual link showing distance
     ]
 
-
     ];;if mouse down end
   ];;if update-mgraphics?
-
 
   if not mouse-down? [
     set mouse-dist 0
     set mouse-acc 0 ;;accelerationsvektoren tilføjes kun så længe musen stadig er holdt nede
   ]
 
-
   if mouse-down? and abs mouse-dist > 0 [ ;;to avoid division by 0
 
     ;;ADD THE ACCELERATION VECTOR BASED ON THE DISTANCE
 
     let scaling-mouse 1000 ;;@ testing size of scaling-mouse
-
     set mouse-divisor scaling-mouse / mouse-dist ;;/ scaling-mouse
 
     set mouse-acc (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
@@ -206,8 +197,7 @@ to do-mouse-stuff
   if mouse-xcor < object-x [set mouse-acc (- mouse-acc)]
   ]
 
-  set push-force mouse-acc ;;push-force is added to d-speed in accelerate-object
- ;; print push-force
+  set push-force mouse-acc ;;push-force is used in accelerate-object
 
   set old-mouse-x mouse-xcor ;;to check next run through if mouse position has changed ;;@delete?
   set old-object-x object-x
@@ -240,6 +230,15 @@ if push-force != 0 [print "" print word "time pushed: " time-pushed print word "
       ]
     ]
 
+   if styring = "mus" [
+      ifelse push-force = 0 [
+        set a 0 ;;no acceleration if no mouse pull this tick
+      ]
+      [
+        set a push-force / choose-mass ;;a = F/m ;;@CHECK IN DO-MOUSE-STUFF THAT THIS IS IN NEWTON
+      ]
+    ]
+
 if a != 0 [print word "acceleration: " a output-print word "acceleration: " a] ;;@for testing only
 
 
@@ -258,7 +257,7 @@ if v != 0 [print word "velocity: " v output-print word "velocity: " v] ;;@for te
 
 
 ;;3. Calculate friction
-    ifelse season = "summer"
+    ifelse season = "sommer"
       [set friktion gnidnings-kof * normalkraft] ;;friktion = my * normalkraft ;;enhed: Newton
       [set friktion 0]
 
@@ -313,6 +312,7 @@ if final-displacement > 0 [print word "final-displacement: " final-displacement 
     set old-speed speed ;;the previous speed ;;object variable
 
     set prev-push-force push-force ;;save this push-force for next tick (to check if they keep holding it down)
+    set total-push-force total-push-force + abs push-force ;;used to calculate arbejde
     set push-force 0 ;;reset the skubbekraft once it has been applied
 
     let lower-limit 0.05 ;;@can tweak this (since speed never quite reached 0)
@@ -328,7 +328,7 @@ if final-displacement > 0 [print word "final-displacement: " final-displacement 
 
  ;;SPARKS animation
   if count objects > 0 and not lost? and object-y > min-pycor + 2 [ ask patch (object-x) (object-y - 2) [
-    if (global-speed > 0 or global-speed < 0) and season != "winter" [ ;;only if the object is moving and it's not winter (ice = 'no' friction)
+    if (global-speed > 0 or global-speed < 0) and season != "vinter" [ ;;only if the object is moving and it's not winter (ice = 'no' friction)
 
     sprout-graphics 2 [
       set shape "star" set color yellow set size 0.7 set lifetime 0
@@ -344,6 +344,13 @@ end
 to-report normalkraft
   report choose-mass * g ;;præcis ligesom tyngdekraften - men i modsat retning!
 end
+
+to-report arbejde
+  report abs total-push-force * distance-flyttet ;;A = F * s (enheder: joule = Newton * meter)
+  ;;@check: is this right? både F og s er for skub i begge retninger
+end
+
+
 ;;----------
 
 
@@ -580,12 +587,16 @@ to make-world
   ask players [die]
   ask objects [die]
 
-  ifelse level = "testlevel 1" ;;add other cliff-less levels here
+  ifelse level = "testlevel 1" ;;add all the cliff-less levels here
     [set klippe? FALSE]
     [set klippe? TRUE]
 
+  ifelse level = "testlevel 4" ;;add all the winter levels here
+    [set season "vinter"]
+    [set season "sommer"]
 
-  if season = "summer" [
+
+  if season = "sommer" [
   ask patches [ ;;summer sky and grass
     ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor sky] [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;summer
   ]
@@ -596,7 +607,7 @@ to make-world
     ]
   ]
 
-  if season = "winter" [
+  if season = "vinter" [
     ask patches [ ;;winter sky and snow
     ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor 94] [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ]
     if pycor < -1 and pycor > -3 and pxcor < (max-pxcor - 9) [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
@@ -610,7 +621,7 @@ to make-world
   ]
 
    create-houses 1 [ ;;the house
-    ifelse season = "winter" [set shape "house-snow"] [set shape "house"]
+    ifelse season = "vinter" [set shape "house-snow"] [set shape "house"]
     set color 24
     set size 3
     setxy (max-pxcor - 13) 0
@@ -632,6 +643,7 @@ to make-object
   ask objects [die]
   ask explosions [die]
   set push-force 0
+  set total-push-force 0
 
   ;;clear yay you won patches
   ask patch (max-pxcor - (max-pxcor / 2) - 3) (max-pycor - 6) [set plabel ""]
@@ -642,19 +654,9 @@ to make-object
   ask patch (max-pxcor - (max-pxcor / 2) - 9) (max-pycor - 9) [set plabel ""]
 
 
-
-  if level = "2 - car" [
-  create-objects 1 [
-    set shape "push-car" ;;push-car is my modified non-floating shape
-    set color 7
-    set size 3
-    setxy (min-pxcor + 4) 0
-    set heading 90 ;;so positive speed means going to the right, negative to the left
-    set mass choose-mass ;;@ADD fixed mass here
-    set points 100
-  ]]
-
-
+;;;;;;;;;;
+;;LEVELS;;
+;;;;;;;;;;
 
   if level = "testlevel 1" [
     set klippe? FALSE ;;ingen afgrund
@@ -664,11 +666,9 @@ to make-object
       set size 3
       setxy (min-pxcor + 4) 0
       set heading 90
-      set mass choose-mass ;;@ADD fixed mass here
+      set choose-mass 5
     ]
   ]
-
-
 
   if level = "testlevel 2" [
     set klippe? TRUE ;;nu med afgrund (specified in make-world, not here (but kept here for overblik)
@@ -678,12 +678,37 @@ to make-object
       set size 3
       setxy (min-pxcor + 4) 0
       set heading 90
-      set mass choose-mass ;;@ADD fixed mass here
+      set choose-mass 5
+    ]
+  ]
+
+  if level = "testlevel 3" [
+    set klippe? TRUE ;;nu med afgrund (specified in make-world, not here (but kept here for overblik)
+    create-objects 1 [
+      set shape "push-car" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
+      set color yellow
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 10
+    ]
+  ]
+
+   if level = "testlevel 4" [
+    set klippe? TRUE ;;nu med afgrund (specified in make-world, not here (but kept here for overblik)
+    create-objects 1 [
+      set shape "push-car" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
+      set color yellow
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 10
+      ;;vinter ;;ADD THIS IN MAKE-WORLD - just here for overblik
     ]
   ]
 
 
-  ;;@add more objects/levels here
+  ;;@add more levels here
 end
 
 to genstart
@@ -694,6 +719,7 @@ to genstart
   set win? FALSE set lost? FALSE
   ask players [setxy (min-pxcor + 1) 0 set shape "person"]
   set push-force 0
+  set total-push-force 0
   ask objects [set speed 0]
   set nr-of-pushes 0 ;;@could save a total nr of pushes across levels?
   set distance-flyttet 0 ;;@igen: could save cumulative across levels
@@ -814,7 +840,7 @@ INPUTBOX
 290
 580
 choose-mass
-1.0
+5.0
 1
 0
 Number
@@ -825,16 +851,16 @@ INPUTBOX
 100
 335
 skub
-20.0
+140.0
 1
 0
 Number
 
 MONITOR
 1060
-70
+10
 1170
-115
+55
 Objektets hastighed
 min [speed] of objects
 17
@@ -847,7 +873,7 @@ BUTTON
 1025
 43
 Vinter
-set season \"winter\"\nmake-world\nmake-object
+set season \"vinter\"\nmake-world\nmake-object
 NIL
 1
 T
@@ -864,7 +890,7 @@ BUTTON
 1025
 73
 Sommer
-set season \"summer\"\nmake-world\nmake-object
+set season \"sommer\"\nmake-world\nmake-object
 NIL
 1
 T
@@ -900,7 +926,7 @@ CHOOSER
 120
 level
 level
-"testlevel 1" "testlevel 2" "2 - car"
+"testlevel 1" "testlevel 2" "testlevel 3" "testlevel 4"
 0
 
 BUTTON
@@ -929,7 +955,7 @@ hastighed
 hastighed
 1
 100
-53.0
+38.0
 1
 1
 %
@@ -947,10 +973,10 @@ show-timer
 11
 
 MONITOR
-980
-160
-1045
-205
+970
+155
+1035
+200
 Antal skub
 nr-of-pushes
 17
@@ -1161,19 +1187,19 @@ afstand-i-meter
 11
 
 TEXTBOX
-65
-375
-215
-393
+60
+385
+210
+403
 joule = Newton * meter
 11
 0.0
 1
 
 MONITOR
-985
+970
 100
-1042
+1027
 145
 NIL
 try-nr
@@ -1183,9 +1209,9 @@ try-nr
 
 MONITOR
 1060
-115
+55
 1117
-160
+100
 NIL
 a
 17
@@ -1194,9 +1220,9 @@ a
 
 MONITOR
 1115
-115
+55
 1172
-160
+100
 NIL
 s
 17
@@ -1215,10 +1241,10 @@ friktion
 11
 
 MONITOR
-1065
-160
-1162
-205
+1060
+100
+1157
+145
 NIL
 distance-flyttet
 17
@@ -1230,6 +1256,27 @@ OUTPUT
 10
 1495
 175
+11
+
+TEXTBOX
+25
+340
+230
+366
+@BRUGES IKKE I MUSE-STYRING
+11
+0.0
+1
+
+MONITOR
+1085
+145
+1142
+190
+NIL
+arbejde
+17
+1
 11
 
 @#$#@#$#@
