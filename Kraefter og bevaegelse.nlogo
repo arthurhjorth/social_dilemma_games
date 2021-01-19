@@ -1,11 +1,14 @@
 globals [
   action ;;last button pressed. left = 1, right = 2
-  object-x ;;the object's current position
-  object-y
+  ;;object-x ;;the object's current position
+  ;;object-y
   push-force
+  push-force-plot
+  net-force
   total-push-force
   global-speed ;;for plotting @?
-  global-d-speed
+
+  fratræk-friktion?
 
   win? ;;to see if they've won
   lost? ;;to see if they've lost (pushed the object over the edge)
@@ -20,7 +23,7 @@ globals [
   nr-of-pushes
   distance-flyttet
 
-
+  house-color-time ;;for check-win, color house green if on the right patch, keep it green for a while
 
   energy ;;the player's energy (keeping it in a global variable for now) @change this?
 
@@ -40,20 +43,23 @@ globals [
 
   a ;;acceleration
   v ;;velocity
-  delta-v ;;velocity after friction is subtracted
+  delta-v ;;change in speed. acceleration or deceleration
+  delta-v-plot ;;for plotting, isn't set to 0 if it doesn't overcome the friction
+
+  delta-x ;;displacement in meters
+
   friktion ;;friktion
   s ;;displacement
   u ;;initial/current speed
   final-displacement ;;after scaling
 
-  prev-push-force
-  time-pushed
-
 ]
 
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
-breed [explosions explosion]
+
 breed [objects object]
+breed [explosions explosion]
+
 breed [players player]
 breed [graphics graphic] ;;sparks
 breed [mgraphics mgraphic] ;;mouse-related graphics
@@ -69,7 +75,7 @@ objects-own [
   mass
   object-friction
 
-  kinetisk-energi
+  ;;kinetisk-energi
 
   real-heading
   apparent-heading ;;only for fail animation
@@ -91,9 +97,9 @@ to setup
   make-world ;;cliff and season also specified here
   make-object ;;sets up the chosen level that's chosen
 
-  set object-x -26 ;;the object's starting position
+  ;;set object-x -26 ;;the object's starting position
 
-  set win? false set lost? false
+  set win? false set lost? false set fratræk-friktion? false
   set timer-running? false
   set nr-of-pushes 0
   set distance-flyttet 0
@@ -106,9 +112,9 @@ end
 to go
   every 3 / hastighed   [
 
-    if count objects > 0 [
-      set object-x [xcor] of one-of objects
-      set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
+    ;;if count objects > 0 [ ;;NOW TWO REPORTERS INSTEAD? ;;but check that mouse-stuff works
+      ;;set object-x [xcor] of one-of objects
+      ;;set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
 
     if not lost? and not win? [do-mouse-stuff]
 
@@ -118,17 +124,25 @@ to go
 
     if not lost? and not win? [
       accelerate-object
-      ask objects [set kinetisk-energi 0.5 * choose-mass * delta-v ^ 2] ;;kinetisk energi er en halv gange masse gange fart i anden
+      ;;accelerate-object2 ;;@TESTING NEW APPROACH
+      ;;ask objects [set kinetisk-energi 0.5 * choose-mass * v ^ 2] ;;kinetisk energi er en halv gange masse gange fart i anden ;;NOW A REPORTER INSTEAD
       check-win
       update-graphics
     ]
 
-    ;;ask objects [if resistance > 0 [print resistance]] ;;@to check how it gets too high, need to add failsafe in resistance reporter
-
-    ifelse mouse-xcor = object-x [set mouse-on-object? TRUE] [set mouse-on-object? FALSE] ;;@testing precision
-
     tick
+  ]
+end
 
+to-report object-x
+  if count objects > 0 [
+      report [xcor] of one-of objects
+  ]
+end
+
+to-report object-y
+  if count objects > 0 [
+      report [ycor] of one-of objects
   ]
 end
 
@@ -158,7 +172,7 @@ to do-mouse-stuff
       set size 1
       set color yellow
       set shape "circle"
-      setxy (mouse-xcor) (object-y) ;;@mouse-ycor instead?
+      setxy (mouse-xcor) (object-y)
       set lifetime 1 ;;@?
       set name "mouse-dot"
     ]
@@ -187,155 +201,178 @@ to do-mouse-stuff
   if mouse-down? and abs mouse-dist > 0 [ ;;to avoid division by 0
 
     ;;ADD THE ACCELERATION VECTOR BASED ON THE DISTANCE
-
     let scaling-mouse 1000 ;;@ testing size of scaling-mouse
     set mouse-divisor scaling-mouse / mouse-dist ;;/ scaling-mouse
 
     set mouse-acc (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
 
     if mouse-xcor > object-x [set mouse-acc (mouse-acc)] ;;if pushing left, subtract push-force instead of adding it (negative speed = left)
-  if mouse-xcor < object-x [set mouse-acc (- mouse-acc)]
+    if mouse-xcor < object-x [set mouse-acc (- mouse-acc)]
   ]
 
   set push-force mouse-acc ;;push-force is used in accelerate-object
 
-  set old-mouse-x mouse-xcor ;;to check next run through if mouse position has changed ;;@delete?
+  set old-mouse-x mouse-xcor ;;to check next run through if mouse position has changed
   set old-object-x object-x
 
   ] ;;END of if styring = mus
 end
 
 
-
 to accelerate-object
   ask objects [
 
-  ;;tag højde for om de skubber over længere tid end bare et tick:
-  ifelse push-force = prev-push-force
-	   [set time-pushed time-pushed + tick-i-sekunder] ;;hvor mange sekunder de har skubbet med denne kraft (increasing if they hold down the key)
-     [set time-pushed tick-i-sekunder] ;;hvis de ikke holder inde over længere tid
+;;0. Calculate friction FIRST?!
+    ifelse season = "sommer"
+      [set friktion ((gnidnings-kof * normalkraft) * tick-i-sekunder)] ;;friktion = my * normalkraft ;;enhed: Newton ;;ganget med tid, så det passer med skubbevektoren (?!) ;;altid positiv ;;@add precision?
+      [set friktion 0]  ;;ingen friktion hvis vinter
+    ;;[set friktion precision ((0.05 * normalkraft) * tick-i-sekunder) 2] ;;@ gnidningskraft hvis is?
+    ;;simulationen ignorerer den minimale forskel på statisk og dynamisk friktion
 
-if push-force != 0 [print "" print word "time pushed: " time-pushed print word "push-force: " push-force
-    output-print "" output-print word "time pushed: " time-pushed output-print word "push-force: " push-force
-    ] ;;@for testing only
-    ;;push-force = skubbekraften i Newton (positiv = mod højre, negativ = mod venstre)
 
-;;1. Calculate acceleration
-   if styring = "tastatur" [
-      ifelse push-force = 0 [
-        set a 0 ;;no acceleration if no push this tick
+;;0.5. Calculate skubbekraft (scaled ligesom friktion?)
+    ;;push-force = værdien for "skub". Positiv hvis mod højre, negativ hvis mod venstre.
+    ;;enhed: Newton
+       ;;MEN PER HVAD?! SEKUND? SKAL PASSE MED TICK-I-SEKUNDER! OG MED FRIKTIONEN!
+    ;;SCALE PUSH-FORCE?!
+
+    ;;@CHECK THAT PUSH-FORCE (SKUB) IS IN NEWTON - should it be 'translated' from the interface input number?! depending on tick-i-sekunder?
+
+
+
+;;BEREGN NET-KRAFTEN (TRÆK FRIKTION FRA (/LÆG TIL)!
+    ifelse abs push-force > friktion [ ;;hvis skubbekraften overstiger friktionskraften (@men hvis allerede i bevægelse, er det ikke nødvendigt)
+      if push-force > 0 [
+        set net-force (push-force - friktion) ;;if push towards right, friction towards left
       ]
-     [
-      set a push-force / choose-mass ;a = F/m ;;acceleration = Force / mass ;;push-force positive if going right, negative if going left ;;@acceleration can be 'negative' (to the left)
-      ]
+
+      if push-force < 0 [
+        set net-force (push-force + friktion) ;;if push towards left, friction towards right
+      ]  ;;@MEN hvad hvis objektet fx bevæger sig med høj fart mod højre, men spilleren skubber et lille skub mod venstre? 2 x friktion?!
     ]
+
+    [ ;;hvis skubbekraften IKKE overstiger friktionskraften (eller fx bare er 0):
+      ifelse abs v > 0 ;;hvis objektet er i bevægelse:
+        [
+          set fratræk-friktion? TRUE
+          ifelse v > 0
+            [set net-force ( - friktion )] ;;hvis bevægelse mod højre
+            [set net-force friktion] ;;hvis bevægelse mod venstre
+      ]
+        [set net-force 0] ;;hvis objektet IKKE er i bevægelse
+    ]
+
+      ;;;;så hvis der ikke skubbes (push-force = 0), trækkes friktionen stadig fra i net-force! men kun ned til v = 0! (?!) kommer senere?
+         ;;^^friktionen skal jo ikke pludselig kunne få objektet til at skifte retning!
+
+    ;OG SÅ ER DET PÅ DENNE NET-KRAFT, AT DE FØLGENDE BEREGNINGER SKAL FORETAGES!
+
+;;1. Calculate delta-v (acceleration or deceleration)
+
+    ;;F here should be "the vector SUM of external forces" !? så friktion er først trukket fra!
+
+   if styring = "tastatur" [
+      ifelse net-force = 0 [ ;;net-force er KUN 0, hvis objektet står stille, og der ikke skubbes (med tilstrækkelig kraft)
+        set delta-v 0 ;;no acceleration or deceleration if no (sufficient) push this tick
+
+      ]
+     [ ;;hvis abs net-force > 0 :
+      set delta-v (net-force / choose-mass) * tick-i-sekunder ;;@scaling med tid - hvordan? (ENTEN her eller i v = u + a*t)
+        ;a = F/m ;;acceleration = Force / mass ;;@acceleration can be 'negative' (modsat fortegn af v, fx hvis intet skub men friktion)
+      ] ;;@net-force instead of push-force?
+    ]
+
 
    if styring = "mus" [
-      ifelse push-force = 0 [
-        set a 0 ;;no acceleration if no mouse pull this tick
+      ifelse net-force = 0 [
+        set delta-v 0 ;;no acceleration if standing still and no mouse pull this tick
       ]
       [
-        set a push-force / choose-mass ;;a = F/m ;;@CHECK IN DO-MOUSE-STUFF THAT THIS IS IN NEWTON
+        set delta-v (net-force / choose-mass) * tick-i-sekunder ;;a = F/m
       ]
     ]
-
-if a != 0 [print word "acceleration: " a output-print word "acceleration: " a] ;;@for testing only
 
 
 ;;2. Calculate new velocity
-    set u [speed] of one-of objects ;;u = initial/current speed ;;(only ever one object at a time)
-
-    set v u + ( a * time-pushed )  ;;v = u + a*t ;;velociy = initial speed + acceleration * time force is applied
-
-    ;;MEN PGA t:
-    ;;@^^så bliver det vel afgørende, hvor fine grained vi er/hvor tit vi tjekker Newton applied?! ;;skal det ændres, så hvis de holder inde, ændres t...?
-
-         ;;if no acceleration, v = u (new speed = initial speed)
-         ;;@velocity can be 'negative' (to the left)
-
-if v != 0 [print word "velocity: " v output-print word "velocity: " v] ;;@for testing only
+    ;;set u [speed] of one-of objects ;;u = initial/current speed ;;(only ever one object at a time)
 
 
-;;3. Calculate friction
-    ifelse season = "sommer"
-      [set friktion gnidnings-kof * normalkraft] ;;friktion = my * normalkraft ;;enhed: Newton
-      [set friktion 0]
+
+      ;;kode for hvis objektet er i bevægelse, intet skub, så netforce er bare +friktion eller -friktion ... men friktion skal aldrig give skub i modsat retning, men resultere i stilstand!:
+    ifelse ( fratræk-friktion? and (v < 0) and v + delta-v > 0 ) or ( fratræk-friktion? and v > 0 and v + delta-v < 0 )
+      [set v 0]
+      [set v (v + delta-v)] ;;@tids-scaling allerede gjort ovenfor (a*t). (kode efter chapter 2 pdf!)
+
+    ;;if abs v > 0 [print word "v: " v] ;;@testing
 
 
-;;if v != 0 [print word "friktion: " friktion output-print word "friktion: " friktion]
+    set fratræk-friktion? FALSE
 
-    ;;@hvad med forskellen på statisk og dynamisk friktion? ;;to forskellige gnidningskoefficienter?!
+    ;;set v u + ( a * tick-i-sekunder )  ;;v = u + a*t ;;velociy = initial speed + acceleration * time force is applied
+         ;;if no acceleration, new speed = initial speed ;;velocity can be 'negative' (to the left)
 
-    set delta-v v ;;for the case where there's no friction (delta-v used in step 4)
-
-
-    ;;@SKUBBET SKAL FØRST STARTE, HVIS DENNE FRIKTIONS-VEKTOR OVERKOMMES
-    ;;@^^så bliver det vel afgørende, hvor fine grained vi er/hvor tit vi tjekker Newton applied?! ;;skal det ændres, så hvis de holder inde, ændres t...?
-
-    ifelse abs delta-v > friktion [ ;;hvis skubbekraften overstiger friktionskraften
-    if v > 0 [set delta-v (v - friktion)] ;;if currently going right, friction towards left
-    if v < 0 [set delta-v (v + friktion)] ;;if currently going left, friction towards right
-    ]
-    [
-    set delta-v 0 ;;hvis skubbekraften IKKE overstiger friktionskraften
+    ;;if object hits 'wall'/edge of world, it immediately stops (instead of just building up velocity):
+    if (object-x < min-pxcor + 0.5 and [shape != "pushing-right"] of one-of players) or (not klippe? and object-x > max-pxcor - 0.5 and [shape != "pushing-left"] of one-of players) [
+      set v 0
     ]
 
 
-;;4. Calculate displacement
-    ifelse a = 0 [
-      set s delta-v * time-pushed ;;displacement = velocity * time (if no acceleration) ;;delta-v = velocity after friction is subtracted
-    ]
-    [
+
+;;3. Calculate displacement
+
+    set delta-x (v * tick-i-sekunder) ;;displacement = velocity * time
+
+   ;; ifelse a = 0 [
+     ;; set s delta-v * tick-i-sekunder ;;displacement = velocity * time (if no acceleration) ;;delta-v = velocity after friction is subtracted
+    ;;]
+    ;;[
      ;;Calculate displacement given initial and final speeds ;;@MAYBE DON'T NEED THIS?! DO THIS? OR SIMPLY CALCULATE NEW VELOCITY, THEN DO s = v*t?
     ;;s = 1/2 * (u + v) * t ;;displacement = 1/2 * (initial speed + final speed) * time force is applied
-    set s 0.5 * (u + delta-v) * time-pushed
+    ;;set s 0.5 * (u + delta-v) * tick-i-sekunder
 
-if s > 0 [print word "s (displacement): " s output-print word "s (displacement): " s] ;;@for testing only
-
-    ] ;;end of if a != 0
+    ;;] ;;end of if a != 0
 
 
 ;;5. Move the object!
-    set final-displacement s * patch-i-meter ;;s is displacement in meters ;;@right now without friction
+    set final-displacement delta-x / patch-i-meter ;;delta-x is displacement in meters (divideret ift scaling)
 
-if final-displacement > 0 [print word "final-displacement: " final-displacement output-print word "final-displacement: " final-displacement] ;;@for testing only
+    forward final-displacement ;;moving the object (can be positive or negative)
 
-    forward final-displacement
-
-
-    set distance-flyttet distance-flyttet + abs final-displacement
-    set final-displacement 0 ;;@?
+    set distance-flyttet precision (distance-flyttet + abs final-displacement) 10 ;;@can change precision
 
 
 ;;6. Reset/update variables
-    set speed delta-v ;;the new calculated velocity (with friction subtracted), saved to object variable (and used as u in calculations next tick)
-    set old-speed speed ;;the previous speed ;;object variable
-
-    set prev-push-force push-force ;;save this push-force for next tick (to check if they keep holding it down)
-    set total-push-force total-push-force + abs push-force ;;used to calculate arbejde
-    set push-force 0 ;;reset the skubbekraft once it has been applied
-
+    ;;set speed delta-v ;;the new calculated velocity (with friction subtracted), saved to object variable (and used as u in calculations next tick)
     let lower-limit 0.05 ;;@can tweak this (since speed never quite reached 0)
-    if speed < lower-limit and speed > 0 [set speed 0] ;;to the right
-    if speed > (- lower-limit) and speed < 0 [set speed 0] ;;to the left
+    if v < lower-limit and v > 0 [set v 0] ;;to the right
+    if v > (- lower-limit) and v < 0 [set v 0] ;;to the left
 
-    set speed precision speed 5 ;;@precision can be tweaked
+    ;;set v precision v 5 ;;@precision can be tweaked
+
+
+    set speed v ;;speed is an object-variable, v is a global
+    set old-speed speed ;;the previous speed ;;object variable
     set global-speed speed ;;plots continuously
     ;;if old-speed != speed [set global-speed speed] ;;for plotting only when the speed changes @?
+
+    set total-push-force total-push-force + abs push-force ;;used to calculate arbejde
+    set push-force-plot push-force ;;doesn't reset to 0, for plotting
+    set push-force 0 ;;reset the skubbekraft once it has been applied
+
 
     ] ;;END OF ASK OBJECTS
 
 
  ;;SPARKS animation
-  if count objects > 0 and not lost? and object-y > min-pycor + 2 [ ask patch (object-x) (object-y - 2) [
-    if (global-speed > 0 or global-speed < 0) and season != "vinter" [ ;;only if the object is moving and it's not winter (ice = 'no' friction)
-
-    sprout-graphics 2 [
-      set shape "star" set color yellow set size 0.7 set lifetime 0
-        let rando random 2 ;;random little way to set random heading in one of two intervals
-        ifelse rando = 1
-          [set heading 270 + (random 91)] ;;somewhere between 270 and 360
-          [set heading random 91] ;;between 0 and 90
+  if count objects > 0 and not lost? and object-y > min-pycor + 2 [
+    ask patch (object-x) (object-y - 2) [
+      if (global-speed > 0 or global-speed < 0) and season != "vinter" [ ;;only if the object is moving and it's not winter (ice = 'no' friction)
+        sprout-graphics 2 [
+          set shape "star" set color yellow set size 0.7 set lifetime 0
+          let rando random 2 ;;random little way to set random heading in one of two intervals
+          ifelse rando = 1
+            [set heading 270 + (random 91)] ;;somewhere between 270 and 360
+            [set heading random 91] ;;between 0 and 90
   ]]]]
 end
 
@@ -350,39 +387,41 @@ to-report arbejde
   ;;@check: is this right? både F og s er for skub i begge retninger
 end
 
+to-report kinetisk-energi
+  report 0.5 * choose-mass * v ^ 2
+end
 
-;;----------
-
-
-;;to-report resistance ;;@substitute this with gnidningsmodstand?
-  ;; minus resistance. The resistance depends on the speed (see the resistance reporter) ;;ACTUALLY SHOULDN'T DEPEND ON SPEED ?!
-        ;;modstanden er proportionel med kvadratet på hastigheden (hvis man fordobler hastigheden, firedobler man modstanden) (?!)
-
-  ;;let modstand-used modstand / 10
-  ;;if season = "summer" [
-    ;;report speed ^ 2 / (1 / (modstand-used)) ;;the higher modstand, the higher resistance
-    ;;@add failsafe here, sometimes the number can still get too high for NetLogo (?)
-  ;;]
-  ;;if season = "winter" [
-    ;;report 0
-  ;;]
-;;end
-
-;;----------
 
 to check-win
   ask houses [
     let win-patches (patch-set patch-here [neighbors] of patch-here)
     ask win-patches [
       let the-object one-of objects-here
-      if the-object != nobody [
-        if [speed < 0.03] of the-object [ ;;@ can change accuracy needed to win
+      let object-here? count objects-here = 1
+      ifelse object-here? [ ;;if the object is on the win-patches
+
+       ask houses [
+         set color green ;;the house goes green
+        ]
 
 
+
+        if [abs speed < 0.03] of the-object [ ;;@ can change accuracy needed to win
           if styring = "mus" and not mouse-down? [set win? TRUE] ;;kan kun vinde, når museknappen løftes
           if styring = "tastatur" [set win? TRUE]
         ]
       ]
+
+      [
+        ask houses [
+          set house-color-time house-color-time + 1
+          if house-color-time = 30 [ ;;@tweak this time? make it depend on tick scaling?
+            set color 24 ;; if the-object is not there, house changes back to original color
+            set house-color-time 0
+          ]
+        ]
+      ]
+
   ]
   ]
 
@@ -394,14 +433,14 @@ to check-win
     ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if won, freeze visual timer at end time
     set last-score score
     set score score + 1
-    ask objects [die]
+   ;; ask objects [die]
     ask players [set shape "person-happy"]
     ask graphics [die] ask mgraphics [die] ;;to kill off any sparks and the elastic (if mouse control)
     ask patch (max-pxcor - (max-pxcor / 2) - 3) (max-pycor - 6) [set plabel (word "Sejt! Du brugte " (timer-at-end) " sekunder og " nr-of-pushes " skub.") ]
     ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 9) [set plabel "Fortsæt det gode arbejde!"]
 
     set timer-running? FALSE ;;so the timer can start over again with their next first push
-    set global-speed 0 set global-d-speed 0
+    set global-speed 0
     set try-nr try-nr + 1 ;;value that records the nr of finished trys
   ]
 end
@@ -492,10 +531,18 @@ to fail-animation ;;what happens when the object gets pushed over the edge
         set color orange
         set size 4
         set shape "star-rot"
+
       ]
     ]
     ]
     [ ;;if explosions are done
+
+     ;;LITTLE FIRE ANIMATION:
+      if count explosions with [shape = "fire"] = 0 [
+          ask patches with [count objects-here = 1] [
+        sprout-explosions 1 [set shape "fire" set size 4 set color yellow set heading 10] ;;fire on top of the explosion ;)
+      ]
+      ]
 
     ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 6) [set plabel (word "Åh nej, objektet faldt ud over kanten!") ]
     ask patch (max-pxcor - (max-pxcor / 2) - 9) (max-pycor - 9) [set plabel "Tryk på 'R' for at prøve igen!"]
@@ -516,9 +563,6 @@ to make-save-list
 
   set save-list lput (list level choose-mass skub nr-of-pushes distance-flyttet gnidnings-kof timer-at-end) save-list
     ;;level, objektets masse, kraft i hvert skub, antal skub, total distance, gnidningskoefficient, tid
-
-  print save-list
-  output-print save-list
 end
 
 
@@ -544,8 +588,9 @@ to move-person
 end
 
 to move-left
-  ask players [
-    ifelse object-x < max-pxcor - 1
+  if not lost? [
+    ask players [
+    ifelse (klippe? and object-x < max-pxcor - 10) or (not klippe? and object-x < max-pxcor - 1) ;;if the sheep isn't over the edge (when lost? is too slow) OR to the very right (when no cliff)
         [setxy (object-x + 1) 0]
         [setxy max-pxcor 0]
     set shape "pushing-left"
@@ -554,21 +599,27 @@ to move-left
   if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
   set timer-running? TRUE
 
-  set push-force (push-force - skub) ;;pushing to the left means negative push-force in these calculations (negative speed = going to the left)
+  set push-force push-force - skub
+
+  ;;let skub-scaled skub * tick-i-sekunder ;;GANGET (før divideret, fejl?!) for at få det til at passe (i interfacet: skub specificeret i N/s)
+  ;;set push-force (push-force - skub-scaled) ;;pushing to the left means negative push-force in these calculations (negative speed = going to the left)
 
   set nr-of-pushes nr-of-pushes + 1
-
-  ;;check-object
+  ]
 end
 
 to move-right
- ask players [
+ if not lost? [
+  ask players [
     ifelse object-x > min-pxcor + 1
         [setxy (object-x + -1) 0] ;;@
         [setxy min-pxcor 0]
     set shape "pushing-right"
 
-    if xcor > (max-pxcor - 10) [set xcor (max-pxcor - 10)] ;;the player can't move over the edge
+
+    if xcor > (max-pxcor - 10) [
+        set xcor (max-pxcor - 10) ;;the player can't move over the edge
+      ]
   ]
 
   if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
@@ -576,8 +627,11 @@ to move-right
 
   set push-force push-force + skub
 
+  ;;let skub-scaled skub * tick-i-sekunder ;;(GANGET) divideret for at få det til at passe (i interfacet: skub specificeret i N/s)
+  ;;set push-force push-force + skub-scaled
+
   set nr-of-pushes nr-of-pushes + 1
-  ;;check-object
+  ]
 end
 
 
@@ -587,13 +641,25 @@ to make-world
   ask players [die]
   ask objects [die]
 
-  ifelse level = "testlevel 1" ;;add all the cliff-less levels here
-    [set klippe? FALSE]
-    [set klippe? TRUE]
+ ;; if level = "testlevel 1" ;;add all forced cliff-less levels here
+   ;; [set klippe? FALSE]
+  ;;if level = "something"  ;;add all the forced cliff levels here
+      ;;[set klippe? true]
 
-  ifelse level = "testlevel 4" ;;add all the winter levels here
+
+  ;; if level = "bil på is" ;;add all the forced winter levels here
+   ;; [set vinter? true]
+  ;; if level = "bil på is" ;;add all the forced summer levels here
+   ;; [set vinter? false]
+
+  ;;^^by not adding the sandbox levels to these two, they can then still choose cliff or winter themselves using the switch:
+
+  ifelse vinter?
     [set season "vinter"]
     [set season "sommer"]
+
+
+    ;;@add sandbox level (can switch between summer and winter)
 
 
   if season = "sommer" [
@@ -658,54 +724,92 @@ to make-object
 ;;LEVELS;;
 ;;;;;;;;;;
 
-  if level = "testlevel 1" [
-    set klippe? FALSE ;;ingen afgrund
+  if level = "æble" [
+    ;;set klippe? FALSE ;;ingen afgrund?
+    create-objects 1 [
+      set shape "apple-small"
+      set color red
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 0.2
+    ]
+  ]
+
+  if level = "får" [
+    ;;set klippe? TRUE ;;nu med afgrund?
     create-objects 1 [
       set shape "sheep"
       set color white
       set size 3
       setxy (min-pxcor + 4) 0
       set heading 90
-      set choose-mass 5
+      set choose-mass 50
     ]
   ]
 
-  if level = "testlevel 2" [
-    set klippe? TRUE ;;nu med afgrund (specified in make-world, not here (but kept here for overblik)
+  if level = "kasse" [
+    ;;set klippe? TRUE
     create-objects 1 [
-      set shape "sheep"
-      set color white
+      set shape "flyttekasse" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
+      set color 37
       set size 3
       setxy (min-pxcor + 4) 0
       set heading 90
-      set choose-mass 5
+      set choose-mass 15
     ]
   ]
 
-  if level = "testlevel 3" [
-    set klippe? TRUE ;;nu med afgrund (specified in make-world, not here (but kept here for overblik)
-    create-objects 1 [
-      set shape "push-car" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
-      set color yellow
-      set size 3
-      setxy (min-pxcor + 4) 0
-      set heading 90
-      set choose-mass 10
-    ]
-  ]
-
-   if level = "testlevel 4" [
-    set klippe? TRUE ;;nu med afgrund (specified in make-world, not here (but kept here for overblik)
+   if level = "bil" [
+    ;;set klippe? TRUE
     create-objects 1 [
       set shape "push-car" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
       set color yellow
       set size 3
       setxy (min-pxcor + 4) 0
       set heading 90
-      set choose-mass 10
+      set choose-mass 1400
       ;;vinter ;;ADD THIS IN MAKE-WORLD - just here for overblik
     ]
   ]
+
+  if level = "afprøv variable" [
+    ;;set klippe? TRUE
+    create-objects 1 [
+      set shape "sheep" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
+      set color black
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+    ]
+  ]
+
+  if level = "køleskab" [
+    ;;set klippe?
+    create-objects 1 [
+      set shape "fridge"
+      set color white
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 80
+      ;;sommer
+    ]
+  ]
+
+  if level = "kat" [
+    ;;set klippe? TRUE
+    create-objects 1 [
+      set shape "my-cat2"
+      set color 7
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 5
+      ;;sommer
+    ]
+  ]
+
 
 
   ;;@add more levels here
@@ -719,6 +823,8 @@ to genstart
   set win? FALSE set lost? FALSE
   ask players [setxy (min-pxcor + 1) 0 set shape "person"]
   set push-force 0
+  set net-force 0
+  set v 0
   set total-push-force 0
   ask objects [set speed 0]
   set nr-of-pushes 0 ;;@could save a total nr of pushes across levels?
@@ -767,10 +873,10 @@ ticks
 30.0
 
 BUTTON
-45
-125
-115
-158
+10
+105
+80
+138
 Opsætning
 setup
 NIL
@@ -784,10 +890,10 @@ NIL
 1
 
 BUTTON
-120
-125
-183
-158
+85
+105
+148
+138
 Spil
 go
 T
@@ -801,10 +907,10 @@ NIL
 1
 
 BUTTON
-850
-520
-915
-553
+765
+515
+830
+548
 VENSTRE
 set action 1
 NIL
@@ -818,10 +924,10 @@ NIL
 1
 
 BUTTON
-920
-520
-985
-553
+835
+515
+900
+548
 HØJRE
 set action 2
 NIL
@@ -835,105 +941,50 @@ NIL
 1
 
 INPUTBOX
-215
-520
-290
-580
+135
+205
+210
+265
 choose-mass
 5.0
 1
 0
 Number
 
-INPUTBOX
-50
-275
-100
-335
-skub
-140.0
-1
-0
-Number
-
-MONITOR
-1060
-10
-1170
-55
-Objektets hastighed
-min [speed] of objects
-17
-1
-11
-
-BUTTON
-970
-10
-1025
-43
-Vinter
-set season \"vinter\"\nmake-world\nmake-object
-NIL
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-1
-
-BUTTON
-970
-40
-1025
-73
-Sommer
-set season \"sommer\"\nmake-world\nmake-object
-NIL
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-1
-
 PLOT
-980
+970
 285
-1460
+1450
 510
-Objektets hastighed
-NIL
-NIL
+Kræfter
+Tid
+Kraft (Newton)
 0.0
 10.0
 0.0
 0.4
 true
-false
+true
 "" ""
 PENS
-"Absolut hastighed" 1.0 0 -2674135 true "" "plot abs global-speed"
+"Friktionskraft" 1.0 0 -7500403 true "" "plot friktion"
+"Skubbekraft" 1.0 0 -955883 true "" "plot abs push-force-plot"
 
 CHOOSER
-70
-75
-162
-120
+115
+10
+207
+55
 level
 level
-"testlevel 1" "testlevel 2" "testlevel 3" "testlevel 4"
-0
+"æble" "kat" "kasse" "får" "køleskab" "bil" "afprøv variable"
+1
 
 BUTTON
-90
-165
-150
-200
+155
+105
+215
+140
 Genstart
 genstart
 NIL
@@ -947,25 +998,25 @@ NIL
 1
 
 SLIDER
-540
-535
-712
-568
+495
+530
+667
+563
 hastighed
 hastighed
 1
 100
-38.0
+54.0
 1
 1
 %
 HORIZONTAL
 
 MONITOR
-980
-215
-1115
-260
+970
+110
+1100
+155
 Timer
 show-timer
 17
@@ -974,9 +1025,9 @@ show-timer
 
 MONITOR
 970
-155
+60
 1035
-200
+105
 Antal skub
 nr-of-pushes
 17
@@ -985,137 +1036,102 @@ nr-of-pushes
 
 SWITCH
 25
-10
+60
 115
-43
+93
 klippe?
 klippe?
-1
+0
 1
 -1000
 
 CHOOSER
-120
+20
 10
-212
+112
 55
 styring
 styring
 "mus" "tastatur"
 1
 
-SLIDER
-50
-240
-195
-273
-modstand
-modstand
-0.1
-5
-1.5
-.1
-1
-NIL
-HORIZONTAL
-
-TEXTBOX
-35
-225
-200
-251
-modstand kun hvis det er sommer
-11
-0.0
-1
-
 MONITOR
-1240
+1280
 215
-1420
+1370
 260
 Kinetisk energi
-min [kinetisk-energi] of objects
+precision kinetisk-energi 2
 17
 1
 11
 
 TEXTBOX
-1230
+1290
 265
-1440
-291
+1495
+285
 kinetisk energi = 0.5 * mass * velocity^2
 11
 0.0
 1
 
 MONITOR
-425
+345
+515
+455
 560
-535
-605
-Bevægelsesafstand
+Meter fra start
 object-x + 26
 2
 1
 11
 
 TEXTBOX
-590
-520
-675
-538
+545
+515
+630
+533
 Spillets hastighed
 11
 0.0
 1
 
 TEXTBOX
-795
-560
-1055
-591
-Tryk på \"J\" og \"L\" piletasterne for at styre
+710
+555
+970
+586
+Tryk på \"J\" og \"L\" tasterne for at styre
 14
 0.0
 1
 
 TEXTBOX
-105
-295
-175
-346
-størrelsen på skubbet (i N)
+10
+190
+115
+256
+størrelsen på skubbet (i N per sekund) (?)
 11
 0.0
 1
 
 TEXTBOX
-225
-580
-295
-621
-objektets masse (i kg)
-11
-0.0
-1
-
-TEXTBOX
-110
-215
 155
-233
-TESTER:
+265
+225
+306
+objektets masse (i kg)
 11
 0.0
 1
 
 INPUTBOX
 30
-415
+310
 105
-475
+370
 g
 9.82
 1
@@ -1124,9 +1140,9 @@ Number
 
 INPUTBOX
 115
-415
+310
 190
-475
+370
 gnidnings-kof
 0.36
 1
@@ -1135,72 +1151,51 @@ Number
 
 TEXTBOX
 120
-475
+370
 215
-516
-my = ca 0.36 for gummi mod græs (ingen enhed)
+450
+my = ca 0.36 for gummi mod græs (ingen enhed)\n(hvis vinter, INGEN friktion)
 11
 0.0
 1
 
 INPUTBOX
-25
-525
-105
-585
+30
+505
+110
+565
 patch-i-meter
-0.25
+0.75
 1
 0
 Number
 
 INPUTBOX
-115
-525
-195
-585
+120
+505
+200
+565
 tick-i-sekunder
-1.0
+0.2
 1
 0
 Number
 
 TEXTBOX
 40
-480
+375
 120
-506
+401
 (m / s^2)
 11
 0.0
 1
 
 MONITOR
-430
-515
-527
-560
-afstand-i-meter
-(object-x + 26) * patch-i-meter
-17
-1
-11
-
-TEXTBOX
-60
-385
-210
-403
-joule = Newton * meter
-11
-0.0
-1
-
-MONITOR
 970
-100
+10
 1027
-145
+55
 NIL
 try-nr
 17
@@ -1208,76 +1203,101 @@ try-nr
 11
 
 MONITOR
-1060
-55
-1117
-100
-NIL
-a
+1375
+365
+1445
+410
+Friktion
+precision friktion 2
 17
 1
 11
 
 MONITOR
-1115
-55
-1172
-100
-NIL
-s
+222
+515
+339
+560
+Distance flyttet i alt
+precision distance-flyttet 4
 17
 1
 11
 
 MONITOR
-350
-525
-407
-570
-NIL
-friktion
+1165
+215
+1275
+260
+Objektets hastighed
+precision v 2
 17
 1
 11
 
-MONITOR
-1060
-100
-1157
-145
-NIL
-distance-flyttet
-17
+SLIDER
+5
+155
+215
+188
+skub
+skub
+0
+300
+92.0
 1
-11
-
-OUTPUT
-1180
-10
-1495
-175
-11
+1
+N
+HORIZONTAL
 
 TEXTBOX
-25
-340
-230
-366
-@BRUGES IKKE I MUSE-STYRING
+10
+390
+110
+408
+g på månen = 1.6
 11
 0.0
 1
 
-MONITOR
-1085
-145
-1142
-190
-NIL
-arbejde
-17
+PLOT
+1165
+10
+1480
+210
+Absolut hastighed
+Tid
+m/s (?)
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"Fart" 1.0 0 -5298144 true "" "plot abs global-speed"
+
+SWITCH
+115
+60
+205
+93
+vinter?
+vinter?
 1
+1
+-1000
+
+TEXTBOX
+30
+485
+225
+511
+TESTES (fjern derefter fra interface):
 11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1325,6 +1345,27 @@ airplane
 true
 0
 Polygon -7500403 true true 150 0 135 15 120 60 120 105 15 165 15 195 120 180 135 240 105 270 120 285 150 270 180 285 210 270 165 240 180 180 285 195 285 165 180 105 180 60 165 15
+
+apple
+false
+0
+Polygon -7500403 true true 33 58 0 150 30 240 105 285 135 285 150 270 165 285 195 285 255 255 300 150 268 62 226 43 194 36 148 32 105 35
+Line -16777216 false 106 55 151 62
+Line -16777216 false 157 62 209 57
+Polygon -6459832 true false 152 62 158 62 160 46 156 30 147 18 132 26 142 35 148 46
+Polygon -16777216 false false 132 25 144 38 147 48 151 62 158 63 159 47 155 30 147 18
+
+apple-small
+false
+0
+Polygon -7500403 true true 107 195 92 225 92 255 107 285 137 300 151 295 167 300 197 285 212 255 212 225 197 195 167 180 152 180 152 180 137 180
+Polygon -16777216 true false 149 194 154 174 145 162 154 157 167 172 159 192
+
+apple-small-rot
+true
+0
+Polygon -7500403 true true 107 195 92 225 92 255 107 285 137 300 151 295 167 300 197 285 212 255 212 225 197 195 167 180 152 180 152 180 137 180
+Polygon -16777216 true false 149 194 154 174 145 162 154 157 167 172 159 192
 
 arrow
 true
@@ -1424,6 +1465,13 @@ Circle -16777216 true false 60 75 60
 Circle -16777216 true false 180 75 60
 Polygon -16777216 true false 150 168 90 184 62 210 47 232 67 244 90 220 109 205 150 198 192 205 210 220 227 242 251 229 236 206 212 183
 
+fire
+true
+0
+Polygon -7500403 true true 151 286 134 282 103 282 59 248 40 210 32 157 37 108 68 146 71 109 83 72 111 27 127 55 148 11 167 41 180 112 195 57 217 91 226 126 227 203 256 156 256 201 238 263 213 278 183 281
+Polygon -955883 true false 126 284 91 251 85 212 91 168 103 132 118 153 125 181 135 141 151 96 185 161 195 203 193 253 164 286
+Polygon -2674135 true false 155 284 172 268 172 243 162 224 148 201 130 233 131 260 135 282
+
 fish
 false
 0
@@ -1457,6 +1505,64 @@ Circle -7500403 true true 96 51 108
 Circle -16777216 true false 113 68 74
 Polygon -10899396 true false 189 233 219 188 249 173 279 188 234 218
 Polygon -10899396 true false 180 255 150 210 105 210 75 240 135 240
+
+flyttekasse
+false
+0
+Rectangle -7500403 true true 60 165 240 300
+Polygon -7500403 true true 195 165 240 120 285 120 240 180
+Polygon -7500403 true true 105 165 60 120 15 120 60 180
+Line -6459832 false 240 180 195 165
+Line -6459832 false 60 180 105 165
+Line -6459832 false 60 180 240 180
+Line -6459832 false 105 165 195 165
+Line -6459832 false 240 180 285 120
+Line -6459832 false 60 180 15 120
+Line -6459832 false 195 165 240 120
+Line -6459832 false 105 165 60 120
+Line -6459832 false 285 120 240 120
+Line -6459832 false 15 120 60 120
+Line -6459832 false 240 180 240 300
+Line -6459832 false 60 180 60 300
+Line -6459832 false 240 300 60 300
+Polygon -6459832 true false 150 180 240 180 193 166 105 166 60 180
+
+flyttekasse-rot
+true
+0
+Rectangle -7500403 true true 60 165 240 300
+Polygon -7500403 true true 195 165 240 120 285 120 240 180
+Polygon -7500403 true true 105 165 60 120 15 120 60 180
+Line -6459832 false 240 180 195 165
+Line -6459832 false 60 180 105 165
+Line -6459832 false 60 180 240 180
+Line -6459832 false 105 165 195 165
+Line -6459832 false 240 180 285 120
+Line -6459832 false 60 180 15 120
+Line -6459832 false 195 165 240 120
+Line -6459832 false 105 165 60 120
+Line -6459832 false 285 120 240 120
+Line -6459832 false 15 120 60 120
+Line -6459832 false 240 180 240 300
+Line -6459832 false 60 180 60 300
+Line -6459832 false 240 300 60 300
+Polygon -6459832 true false 150 180 240 180 193 166 105 166 60 180
+
+fridge
+false
+0
+Rectangle -7500403 true true 68 1 233 301
+Rectangle -16777216 true false 198 130 213 235
+Line -16777216 false 68 90 233 90
+Rectangle -16777216 true false 199 15 214 60
+
+fridge-rot
+true
+0
+Rectangle -7500403 true true 68 1 233 301
+Rectangle -16777216 true false 198 130 213 235
+Line -16777216 false 68 90 233 90
+Rectangle -16777216 true false 199 15 214 60
 
 house
 false
@@ -1503,6 +1609,74 @@ line half
 true
 0
 Line -7500403 true 150 0 150 150
+
+my-cat
+false
+0
+Circle -7500403 true true 150 105 120
+Polygon -7500403 true true 195 195 120 210 75 210 46 211 20 274 42 301 164 300 179 300 209 300 269 300 278 301 290 295 299 285 289 270 243 264 226 241 240 210 238 205 241 196 211 196
+Polygon -7500403 true true 150 165 149 70 209 115 164 160
+Polygon -7500403 true true 270 165 272 72 212 117 257 162
+Polygon -7500403 true true 13 238 10 194 7 151 59 75 110 79 130 104 114 108 76 95 38 152 39 188 61 209 54 251
+Polygon -16777216 true false 212 166 227 166 212 181 197 166 212 166
+Polygon -16777216 true false 195 75
+Circle -7500403 true true 9 206 86
+Polygon -1184463 true false 165 144 178 130 196 130 208 144 193 152 178 152
+Circle -16777216 true false 180 133 14
+Line -16777216 false 224 193 197 193
+Polygon -1184463 true false 218 144 231 130 249 130 261 144 246 152 231 152
+Circle -16777216 true false 233 133 14
+
+my-cat-rot
+true
+0
+Circle -7500403 true true 150 105 120
+Polygon -7500403 true true 195 195 120 210 75 210 46 211 20 274 42 301 164 300 179 300 209 300 269 300 278 301 290 295 299 285 289 270 243 264 226 241 240 210 238 205 241 196 211 196
+Polygon -7500403 true true 150 165 149 70 209 115 164 160
+Polygon -7500403 true true 270 165 272 72 212 117 257 162
+Polygon -7500403 true true 13 238 10 194 7 151 59 75 110 79 130 104 114 108 76 95 38 152 39 188 61 209 54 251
+Polygon -16777216 true false 212 166 227 166 212 181 197 166 212 166
+Polygon -16777216 true false 195 75
+Circle -7500403 true true 9 206 86
+Polygon -1184463 true false 165 144 178 130 196 130 208 144 193 152 178 152
+Circle -16777216 true false 180 133 14
+Line -16777216 false 224 193 197 193
+Polygon -1184463 true false 218 144 231 130 249 130 261 144 246 152 231 152
+Circle -16777216 true false 233 133 14
+
+my-cat2
+false
+0
+Polygon -7500403 true true 158 174 150 94 217 124 172 169
+Circle -7500403 true true 156 110 110
+Polygon -7500403 true true 265 172 273 92 206 122 251 167
+Polygon -16777216 true false 212 170 227 170 212 185 197 170 212 170
+Polygon -16777216 true false 195 75
+Polygon -1184463 true false 166 155 179 141 197 141 209 155 194 163 179 163
+Circle -16777216 true false 181 144 14
+Line -16777216 false 226 198 199 198
+Polygon -1184463 true false 215 154 228 140 246 140 258 154 243 162 228 162
+Circle -16777216 true false 230 143 14
+Polygon -7500403 true true 229 217 247 223 256 239 256 284 269 287 267 299 151 300 143 292 149 284 161 283 162 227 171 220 187 216
+Polygon -7500403 true true 192 215 174 221 165 237 165 282 152 285 154 297 270 298 278 290 272 282 260 281 259 225 250 218 234 214
+Polygon -7500403 true true 159 288 145 275 128 265 113 248 108 235 106 220 105 205 102 182 105 161 111 149 122 149 126 157 122 167 120 176 119 189 119 199 119 211 119 219 124 233 127 241 134 253 148 261 170 264
+
+my-cat2-rot
+true
+0
+Polygon -7500403 true true 158 174 150 94 217 124 172 169
+Circle -7500403 true true 156 110 110
+Polygon -7500403 true true 265 172 273 92 206 122 251 167
+Polygon -16777216 true false 212 170 227 170 212 185 197 170 212 170
+Polygon -16777216 true false 195 75
+Polygon -1184463 true false 166 155 179 141 197 141 209 155 194 163 179 163
+Circle -16777216 true false 181 144 14
+Line -16777216 false 226 198 199 198
+Polygon -1184463 true false 215 154 228 140 246 140 258 154 243 162 228 162
+Circle -16777216 true false 230 143 14
+Polygon -7500403 true true 229 217 247 223 256 239 256 284 269 287 267 299 151 300 143 292 149 284 161 283 162 227 171 220 187 216
+Polygon -7500403 true true 192 215 174 221 165 237 165 282 152 285 154 297 270 298 278 290 272 282 260 281 259 225 250 218 234 214
+Polygon -7500403 true true 159 288 145 275 128 265 113 248 108 235 106 220 105 205 102 182 105 161 111 149 122 149 126 157 122 167 120 176 119 189 119 199 119 211 119 219 124 233 127 241 134 253 148 261 170 264
 
 pentagon
 false
