@@ -63,6 +63,7 @@ breed [explosions explosion]
 breed [players player]
 breed [graphics graphic] ;;sparks
 breed [mgraphics mgraphic] ;;mouse-related graphics
+breed [vgraphics vgraphic] ;;vector force graphics
 
 players-own [
   force
@@ -83,6 +84,7 @@ objects-own [
 
 graphics-own [lifetime name]
 mgraphics-own [lifetime name]
+vgraphics-own [vector-name]
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;KRÆFTER OG BEVÆGELSE;;;
@@ -226,7 +228,7 @@ to accelerate-object
     ifelse season = "sommer"
       [set friktion ((gnidnings-kof * normalkraft) * tick-i-sekunder)] ;;friktion = my * normalkraft ;;enhed: Newton ;;ganget med tid, så det passer med skubbevektoren (?!) ;;altid positiv ;;@add precision?
       [set friktion 0]  ;;ingen friktion hvis vinter
-    ;;[set friktion precision ((0.05 * normalkraft) * tick-i-sekunder) 2] ;;@ gnidningskraft hvis is?
+                      ;;[set friktion precision ((0.05 * normalkraft) * tick-i-sekunder) 2] ;;@ lille gnidningskraft hvis is?
     ;;simulationen ignorerer den minimale forskel på statisk og dynamisk friktion
 
 
@@ -235,7 +237,6 @@ to accelerate-object
     ;;enhed: Newton
        ;;MEN PER HVAD?! SEKUND? SKAL PASSE MED TICK-I-SEKUNDER! OG MED FRIKTIONEN!
     ;;SCALE PUSH-FORCE?!
-
     ;;@CHECK THAT PUSH-FORCE (SKUB) IS IN NEWTON - should it be 'translated' from the interface input number?! depending on tick-i-sekunder?
 
 
@@ -377,6 +378,7 @@ to accelerate-object
 end
 
 
+
 ;;--------BEREGNINGER AF FYSISKE STØRRELSER
 to-report normalkraft
   report choose-mass * g ;;præcis ligesom tyngdekraften - men i modsat retning!
@@ -465,13 +467,106 @@ to update-graphics
   ]
 
 
-
+;;SPARKS:
   ask graphics [ ;;the visual sparks
     forward 1
     set lifetime lifetime + 1
     if lifetime >= 2[die]
   ]
+
+
+
+
+
+;;VISUALISÉR VEKTORER:
+  if vis-vektorer? [
+
+ ;;friction vector
+
+  ;;UPDATES ALL THE TIME
+
+
+    ask vgraphics with [vector-name = "friktion1" or vector-name = "friktion2"] [die] ;;kill the previous vectors
+      print "updating friction vectors! :)"
+    create-vgraphics 1 [
+      set shape "dot" set color red set size 1 set vector-name "friktion1" setxy 0 (min-pycor + 10) ;;can tweak position
+
+      hatch 1 [
+        setxy (vektor-friktion) (min-pycor + 10) ;;negative x-cor indicates the size of the force
+        hide-turtle
+        set vector-name "friktion2"
+        create-link-from myself [ ;;myself refers to the "mommy"/the first vgraphic
+         set color red
+          set thickness 0.3
+         set shape "link2" ;;my custom link arrow
+        ]
+      ]
+    ]
+
+  ;;skubbekraft-vektor
+
+    ;;UPDATES ALL THE TIME RIGHT NOW (CAN CHANGE IF NEEDED)
+
+    ask vgraphics with [vector-name = "skubbekraft1" or vector-name = "skubbekraft2"] [die] ;;kill the previous vectors
+
+     create-vgraphics 1 [
+      set shape "dot" set color black set size 1 set vector-name "skubbekraft1" setxy 0 (min-pycor + 10)
+
+       if abs push-force-plot > 0 [ ;;hvis der er en skubbekraft, tegn vektoren med link:
+          hatch 1 [
+            setxy (vektor-skubbekraft) (min-pycor + 10) ;;negative x-cor indicates the size of the force
+            hide-turtle
+            set vector-name "skubbekraft2"
+            create-link-from myself [ ;;myself refers to the "mommy"/the first vgraphic
+              set color 52
+              set thickness 0.3
+              set shape "link2" ;;my custom link arrow
+        ]
+      ]
+     ]
+    ]
+
+
+
+
+  ] ;;END of if vis-vektorer?
+
 end
+
+to-report vector-divisor ;;just for scaling
+  report 4
+end
+
+
+to-report vektor-friktion ;;the length of the vector representing the friction. Scaled
+  ifelse (- friktion / vector-divisor) >= min-pxcor ;;to prevent it from getting too long!
+    [
+
+      ifelse push-force-plot >= 0 and (count players with [shape = "pushing-left"] = 0) ;;push-force-plot doesn't reset to 0
+        [report (- friktion / vector-divisor)] ;;if pushing right
+        [report friktion / vector-divisor]
+
+
+      if count players with [shape = "pushing-left"] > 0 [
+         report friktion / vector-divisor
+       ]
+
+
+  ] ;;scaled, making it a bit smaller
+
+    [
+    report (- 30) ;;@the min-pxcor - ONLY FOR THE CAR (but not accurate representation) - change @
+  ]
+end
+
+to-report vektor-skubbekraft
+  report push-force-plot / vector-divisor
+
+  if v = 0 [
+    report 0 ;;if no vector should be visualised (i.e. they're pushing left into the wall, push-force > 0 but v = 0...)
+  ]
+end
+
 
 
 to check-object ;;to see if they've lost by pushing it over the edge (if there is one)
@@ -946,7 +1041,7 @@ INPUTBOX
 210
 265
 choose-mass
-5.0
+15.0
 1
 0
 Number
@@ -978,7 +1073,7 @@ CHOOSER
 level
 level
 "æble" "kat" "kasse" "får" "køleskab" "bil" "afprøv variable"
-1
+2
 
 BUTTON
 155
@@ -1056,9 +1151,9 @@ styring
 1
 
 MONITOR
-1280
+1155
 215
-1370
+1245
 260
 Kinetisk energi
 precision kinetisk-energi 2
@@ -1067,9 +1162,9 @@ precision kinetisk-energi 2
 11
 
 TEXTBOX
-1290
+1160
 265
-1495
+1365
 285
 kinetisk energi = 0.5 * mass * velocity^2
 11
@@ -1077,10 +1172,10 @@ kinetisk energi = 0.5 * mass * velocity^2
 1
 
 MONITOR
-345
-515
-455
-560
+1340
+520
+1450
+565
 Meter fra start
 object-x + 26
 2
@@ -1214,23 +1309,12 @@ precision friktion 2
 11
 
 MONITOR
-222
-515
-339
-560
+1215
+520
+1332
+565
 Distance flyttet i alt
 precision distance-flyttet 4
-17
-1
-11
-
-MONITOR
-1165
-215
-1275
-260
-Objektets hastighed
-precision v 2
 17
 1
 11
@@ -1244,7 +1328,7 @@ skub
 skub
 0
 300
-92.0
+20.0
 1
 1
 N
@@ -1298,6 +1382,90 @@ TESTES (fjern derefter fra interface):
 11
 0.0
 1
+
+PLOT
+975
+155
+1155
+285
+Kinetisk energi over tid
+Tid
+Kinetisk energi (joule)
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -10899396 true "" "plot kinetisk-energi"
+
+MONITOR
+1370
+210
+1480
+255
+Objektets hastighed
+precision v 2
+17
+1
+11
+
+MONITOR
+1375
+410
+1445
+455
+Skubbekraft
+abs push-force-plot
+17
+1
+11
+
+SWITCH
+295
+535
+420
+568
+vis-vektorer?
+vis-vektorer?
+0
+1
+-1000
+
+MONITOR
+1100
+520
+1157
+565
+NIL
+v
+17
+1
+11
+
+MONITOR
+945
+515
+1037
+560
+NIL
+vektor-friktion
+17
+1
+11
+
+MONITOR
+440
+535
+697
+580
+NIL
+count players with [shape = \"pushing-right\"]
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1913,6 +2081,16 @@ true
 0
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
+
+link2
+0.0
+-0.2 0 0.0 1.0
+0.0 1 1.0 0.0
+0.2 0 0.0 1.0
+link direction
+true
+0
+Polygon -7500403 true true 90 60 150 0 210 60
 @#$#@#$#@
 1
 @#$#@#$#@
