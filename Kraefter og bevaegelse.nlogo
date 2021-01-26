@@ -71,10 +71,11 @@ players-own [
 ]
 
 objects-own [
+  object-name
   speed
   old-speed
   mass
-  object-friction
+  top-speed
 
   ;;kinetisk-energi
 
@@ -91,7 +92,7 @@ vgraphics-own [vector-name]
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 to setup
-  clear-all ;;but don't want to clear the global 'try-nr'?
+  clear-all
   ;;clear-all-plots clear-ticks clear-turtles clear-patches clear-drawing clear-output ;;everything from clear-all except clear-globals (want to keep try-nr)
 
   set save-list []
@@ -107,6 +108,8 @@ to setup
   set distance-flyttet 0
 
   set mouse-was-down? FALSE
+
+  vis-instruks ;output-print startbesked i outputtet i interface
 
   reset-ticks
 end
@@ -256,17 +259,18 @@ to accelerate-object
       ifelse abs v > 0 ;;hvis objektet er i bevægelse:
         [
           set fratræk-friktion? TRUE
+
           ifelse v > 0
             [set net-force ( - friktion )] ;;hvis bevægelse mod højre
             [set net-force friktion] ;;hvis bevægelse mod venstre
+          ;;så hvis der ikke skubbes (push-force = 0), trækkes friktionen stadig fra i net-force! men kun ned til v = 0! kommer længere nede
       ]
-        [set net-force 0] ;;hvis objektet IKKE er i bevægelse
+        [set net-force 0] ;;hvis objektet IKKE er i bevægelse (og skub !> friktion)
     ]
 
-      ;;;;så hvis der ikke skubbes (push-force = 0), trækkes friktionen stadig fra i net-force! men kun ned til v = 0! (?!) kommer senere?
-         ;;^^friktionen skal jo ikke pludselig kunne få objektet til at skifte retning!
 
-    ;OG SÅ ER DET PÅ DENNE NET-KRAFT, AT DE FØLGENDE BEREGNINGER SKAL FORETAGES!
+
+    ;;OG SÅ ER DET PÅ DENNE NET-KRAFT, AT DE FØLGENDE BEREGNINGER SKAL FORETAGES!
 
 ;;1. Calculate delta-v (acceleration or deceleration)
 
@@ -279,7 +283,7 @@ to accelerate-object
       ]
      [ ;;hvis abs net-force > 0 :
       set delta-v (net-force / choose-mass) * tick-i-sekunder ;;@scaling med tid - hvordan? (ENTEN her eller i v = u + a*t)
-        ;a = F/m ;;acceleration = Force / mass ;;@acceleration can be 'negative' (modsat fortegn af v, fx hvis intet skub men friktion)
+        ;;acceleration = Force / mass ;;acceleration can be 'negative' (modsat fortegn af v, fx hvis intet skub men friktion)
       ] ;;@net-force instead of push-force?
     ]
 
@@ -298,7 +302,6 @@ to accelerate-object
     ;;set u [speed] of one-of objects ;;u = initial/current speed ;;(only ever one object at a time)
 
 
-
       ;;kode for hvis objektet er i bevægelse, intet skub, så netforce er bare +friktion eller -friktion ... men friktion skal aldrig give skub i modsat retning, men resultere i stilstand!:
     ifelse ( fratræk-friktion? and (v < 0) and v + delta-v > 0 ) or ( fratræk-friktion? and v > 0 and v + delta-v < 0 )
       [set v 0]
@@ -306,10 +309,9 @@ to accelerate-object
 
     ;;if abs v > 0 [print word "v: " v] ;;@testing
 
-
     set fratræk-friktion? FALSE
 
-    ;;set v u + ( a * tick-i-sekunder )  ;;v = u + a*t ;;velociy = initial speed + acceleration * time force is applied
+    ;;set v u + ( a * tick-i-sekunder )  ;;v = u + a*t ;;velocity = initial speed + acceleration * time force is applied
          ;;if no acceleration, new speed = initial speed ;;velocity can be 'negative' (to the left)
 
     ;;if object hits 'wall'/edge of world, it immediately stops (instead of just building up velocity):
@@ -320,7 +322,6 @@ to accelerate-object
 
 
 ;;3. Calculate displacement
-
     set delta-x (v * tick-i-sekunder) ;;displacement = velocity * time
 
    ;; ifelse a = 0 [
@@ -352,6 +353,7 @@ to accelerate-object
 
 
     set speed v ;;speed is an object-variable, v is a global
+    if abs speed > top-speed [set top-speed speed] ;;update the top speed for this try
     set old-speed speed ;;the previous speed ;;object variable
     set global-speed speed ;;plots continuously
     ;;if old-speed != speed [set global-speed speed] ;;for plotting only when the speed changes @?
@@ -369,7 +371,7 @@ to accelerate-object
     ask patch (object-x) (object-y - 2) [
       if (global-speed > 0 or global-speed < 0) and season != "vinter" [ ;;only if the object is moving and it's not winter (ice = 'no' friction)
         sprout-graphics 2 [
-          set shape "star" set color yellow set size 0.7 set lifetime 0
+          set shape "star" set color yellow set size 0.5 set lifetime 0
           let rando random 2 ;;random little way to set random heading in one of two intervals
           ifelse rando = 1
             [set heading 270 + (random 91)] ;;somewhere between 270 and 360
@@ -475,46 +477,39 @@ to update-graphics
   ]
 
 
-
-
-
 ;;VISUALISÉR VEKTORER:
   if vis-vektorer? [
 
- ;;friction vector
-
-  ;;UPDATES ALL THE TIME
-
-
+ ;;friction vector (UPDATES ALL THE TIME, change this@)
     ask vgraphics with [vector-name = "friktion1" or vector-name = "friktion2"] [die] ;;kill the previous vectors
-      print "updating friction vectors! :)"
-    create-vgraphics 1 [
-      set shape "dot" set color red set size 1 set vector-name "friktion1" setxy 0 (min-pycor + 10) ;;can tweak position
 
+    create-vgraphics 1 [
+      set shape "dot" set color red set size 1 set vector-name "friktion1" setxy 0 vectors-y ;;can tweak position
+
+
+      if push-force-plot != 0 [ ;;hvis der skubbes dette tick
       hatch 1 [
-        setxy (vektor-friktion) (min-pycor + 10) ;;negative x-cor indicates the size of the force
+        setxy (vektor-friktion) vectors-y ;;x-cor indicates the size of the force
         hide-turtle
         set vector-name "friktion2"
         create-link-from myself [ ;;myself refers to the "mommy"/the first vgraphic
          set color red
-          set thickness 0.3
+         set thickness 0.3
          set shape "link2" ;;my custom link arrow
         ]
       ]
     ]
+    ] ;;end of if push-force != 0
 
-  ;;skubbekraft-vektor
-
-    ;;UPDATES ALL THE TIME RIGHT NOW (CAN CHANGE IF NEEDED)
-
+  ;;skubbekraft-vektor (UPDATES ALL THE TIME RIGHT NOW (CAN CHANGE IF NEEDED))
     ask vgraphics with [vector-name = "skubbekraft1" or vector-name = "skubbekraft2"] [die] ;;kill the previous vectors
 
      create-vgraphics 1 [
-      set shape "dot" set color black set size 1 set vector-name "skubbekraft1" setxy 0 (min-pycor + 10)
+      set shape "dot" set color black set size 1 set vector-name "skubbekraft1" setxy 0 vectors-y
 
        if abs push-force-plot > 0 [ ;;hvis der er en skubbekraft, tegn vektoren med link:
           hatch 1 [
-            setxy (vektor-skubbekraft) (min-pycor + 10) ;;negative x-cor indicates the size of the force
+            setxy (vektor-skubbekraft) vectors-y ;;negative x-cor indicates the size of the force
             hide-turtle
             set vector-name "skubbekraft2"
             create-link-from myself [ ;;myself refers to the "mommy"/the first vgraphic
@@ -527,16 +522,49 @@ to update-graphics
     ]
 
 
+  ;;tyngdekraft-vektor (@SKAL IKKE UPDATE HELE TIDEN)
+;    ask vgraphics with [vector-name = "tyngdekraft1" or vector-name = "tyngdekraft2"] [die] ;;kill the previous vector endpoint
+;
+;     create-vgraphics 1 [
+;      set shape "dot" set color black set size 1 set vector-name "tyngdekraft1" setxy 0 vectors-y
+;
+;          hatch 1 [
+;            setxy 0 (vectors-y - vektor-tyngdekraft) ;;tyngdekraft på y-aksen (nedadgående)
+;            hide-turtle
+;            set vector-name "tyngdekraft2"
+;            create-link-from myself [ ;;myself refers to the "mommy"/the first vgraphic
+;              set color violet
+;              set thickness 0.3
+;              set shape "link2" ;;my custom link arrow
+;        ]
+;      ]
+;    ]
+
+
+
+  ;;net-force vektor (resulterende kraft)
+    ;;net-force-variabel giver ikke helt mening lige nu - fix det@
 
 
   ] ;;END of if vis-vektorer?
 
 end
 
-to-report vector-divisor ;;just for scaling
-  report 4
+;;PLACERING AF VEKTOR-DIAGRAM:
+to-report vectors-y ;;reporter så det let kan tweakes
+  report (min-pycor + 10)
 end
 
+to-report vector-divisor ;;just for scaling of the vectors@
+  report 6
+end
+
+
+;;i stedet for friktionskraften: det arbejde, den laver
+
+;;mængde energi det tog at deaccelerere objektet
+;;forskel på kinetisk energi (- påført). faldet i kinetisk eneri = samlet arbejde, friktionen har udført
+  ;;minus skubbe-energien
 
 to-report vektor-friktion ;;the length of the vector representing the friction. Scaled
   ifelse (- friktion / vector-divisor) >= min-pxcor ;;to prevent it from getting too long!
@@ -550,21 +578,36 @@ to-report vektor-friktion ;;the length of the vector representing the friction. 
       if count players with [shape = "pushing-left"] > 0 [
          report friktion / vector-divisor
        ]
-
-
-  ] ;;scaled, making it a bit smaller
-
-    [
+  ]
+    [ ;;hvis den er for lang til at tegne:
     report (- 30) ;;@the min-pxcor - ONLY FOR THE CAR (but not accurate representation) - change @
   ]
 end
 
-to-report vektor-skubbekraft
-  report push-force-plot / vector-divisor
+to-report vektor-skubbekraft ;;add fail-safe if it gets too long...
+  ifelse ( (push-force-plot / vector-divisor) <= max-pxcor ) and ((push-force-plot / vector-divisor) >= min-pxcor) [
+    report push-force-plot / vector-divisor ;;hvis den ikke bryder rammerne
+  ]
+ [ ;;hvis den er for stor til at tegne, tegn bare så lang som muligt (@men ikke præcis repræsentation!):
+   ifelse (push-force-plot / vector-divisor) > 0 [
+      report 30 ;;if positive (30 = max-pxcor)
+    ]
+   [
+      report (- 30) ;;if negative (-20 = min-pxcor)
+    ]
+  ]
+
 
   if v = 0 [
     report 0 ;;if no vector should be visualised (i.e. they're pushing left into the wall, push-force > 0 but v = 0...)
   ]
+end
+
+
+to-report vektor-tyngdekraft ;;@skal den både vises under stilstand og mens i skub? (indgår vel også i friktion...?)
+  ifelse ( (- normalkraft) / vector-divisor ) > min-pycor
+    [report ( (- normalkraft) / vector-divisor )] ;;negativ normalkraft (fra reporter) = tyngdekraften
+    [report (- 20)] ;;(-20) = min-pycor. Hvis for stor til at tegne (@men ikke præcist!)
 end
 
 
@@ -656,8 +699,8 @@ to make-save-list
   ;;set save-list [] ;;@now overwritten after each go (if we've already sent previous lists to a server or something)? Or should all gos be saved?
   ;;set save-list lput (list "time" timer-at-end) save-list ;;nested list? (first = variable, second = value)
 
-  set save-list lput (list level choose-mass skub nr-of-pushes distance-flyttet gnidnings-kof timer-at-end) save-list
-    ;;level, objektets masse, kraft i hvert skub, antal skub, total distance, gnidningskoefficient, tid
+  set save-list lput (list objekt choose-mass skub nr-of-pushes distance-flyttet gnidnings-kof timer-at-end) save-list
+    ;;objektet, objektets masse, kraft i hvert skub, antal skub, total distance, gnidningskoefficient, tid
 end
 
 
@@ -736,25 +779,7 @@ to make-world
   ask players [die]
   ask objects [die]
 
- ;; if level = "testlevel 1" ;;add all forced cliff-less levels here
-   ;; [set klippe? FALSE]
-  ;;if level = "something"  ;;add all the forced cliff levels here
-      ;;[set klippe? true]
-
-
-  ;; if level = "bil på is" ;;add all the forced winter levels here
-   ;; [set vinter? true]
-  ;; if level = "bil på is" ;;add all the forced summer levels here
-   ;; [set vinter? false]
-
-  ;;^^by not adding the sandbox levels to these two, they can then still choose cliff or winter themselves using the switch:
-
-  ifelse vinter?
-    [set season "vinter"]
-    [set season "sommer"]
-
-
-    ;;@add sandbox level (can switch between summer and winter)
+  apply-opgave ;;fastsætter de tvungne/rette indstillinger for den valgte opgave (årstid, klippe, objekt...)
 
 
   if season = "sommer" [
@@ -798,6 +823,78 @@ to make-world
   ask patch (max-pxcor - 1) (max-pycor - 1) [set plabel (word "Score:" score)] ;;the score counter
 end
 
+to apply-opgave
+
+
+  if opgave = "Undersøg masse" ;;add all forced cliff-less levels here
+   [set klippe? FALSE]
+  ;;if opgave = "something"  ;;add all the forced cliff levels here
+      ;;[set klippe? true]
+
+
+  ;; if opgave = "bil på is" ;;add all the forced winter levels here
+   ;; [set vinter? true]
+
+ ;;add all the forced summer levels here:
+  if opgave = "Startspil" or opgave = "Undersøg masse" [
+   set vinter? false
+  ]
+
+ ;;forced objects:
+  if opgave = "Startspil" [
+    set objekt "kasse"
+  ]
+
+
+  ;;^^by not adding the free levels to these two, they can then still choose cliff or winter themselves using the switch:
+  ifelse vinter?
+    [set season "vinter"]
+    [set season "sommer"]
+end
+
+to vis-instruks ;køres i setup
+  if opgave = "Startspil" [
+    output-print "VELKOMMEN TIL STARTSPIL!"
+    output-print "Tryk på Spil."
+    output-print "Brug skub-slideren til at ændre, hvor stor kraft du skubber med."
+    output-print "Skub flyttekassen hen foran huset (brug J og L tasterne)."
+    output-print "- Hvor hurtigt kan du gøre det?"
+    output-print "- Hvor få skub kan du gøre det i?"
+    output-print "Tryk på Genstart for at starte forfra."
+    output-print "Held og lykke! :)"
+    output-print "PS. Du kan også prøve at sætte klippe? på ON og trykke på 'Opsætning'."
+    output-print "Vær forsigtig med mine ting!"
+
+
+  ]
+
+  if opgave = "Undersøg masse" [ ;@skriv færdig instruks
+    output-print "UNDERSØG MASSE"
+    output-print "(hvordan påvirker masse HASTIGHED og BEVÆGELSESAFSTAND?)"
+    output-print "Prøv at skubbe objekter med forskellig masse."
+    output-print "1. Vælg et objekt i drop-down-menuen."
+    output-print "2. Tryk på Genstart."
+    output-print "(tryk på 'Opsætning' for at viske plottet rent)"
+    output-print "..." ;@
+    output-print "(prøv at give forskellige objekter ET skub med samme kraft...)"
+    output-print "(og sammenlign i plottet ...)"
+  ]
+
+  if opgave = "Undersøg friktion" [
+    output-print "UNDERSØG FRIKTION"
+    output-print "..."
+  ]
+
+  if opgave = "Undersøg skubbekraft" [
+    output-print "UNDERSØG SKUBBEKRAFT"
+    output-print "..."
+  ]
+
+
+end
+
+
+
 
 ;;OBJECTS
 to make-object
@@ -815,14 +912,15 @@ to make-object
   ask patch (max-pxcor - (max-pxcor / 2) - 9) (max-pycor - 9) [set plabel ""]
 
 
-;;;;;;;;;;
-;;LEVELS;;
-;;;;;;;;;;
+;;;;;;;;;;;;
+;;OBJEKTER;;
+;;;;;;;;;;;;
 
-  if level = "æble" [
+  if objekt = "æble" [
     ;;set klippe? FALSE ;;ingen afgrund?
     create-objects 1 [
       set shape "apple-small"
+      set object-name objekt ;;turtle variable
       set color red
       set size 3
       setxy (min-pxcor + 4) 0
@@ -831,71 +929,11 @@ to make-object
     ]
   ]
 
-  if level = "får" [
-    ;;set klippe? TRUE ;;nu med afgrund?
-    create-objects 1 [
-      set shape "sheep"
-      set color white
-      set size 3
-      setxy (min-pxcor + 4) 0
-      set heading 90
-      set choose-mass 50
-    ]
-  ]
-
-  if level = "kasse" [
-    ;;set klippe? TRUE
-    create-objects 1 [
-      set shape "flyttekasse" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
-      set color 37
-      set size 3
-      setxy (min-pxcor + 4) 0
-      set heading 90
-      set choose-mass 15
-    ]
-  ]
-
-   if level = "bil" [
-    ;;set klippe? TRUE
-    create-objects 1 [
-      set shape "push-car" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
-      set color yellow
-      set size 3
-      setxy (min-pxcor + 4) 0
-      set heading 90
-      set choose-mass 1400
-      ;;vinter ;;ADD THIS IN MAKE-WORLD - just here for overblik
-    ]
-  ]
-
-  if level = "afprøv variable" [
-    ;;set klippe? TRUE
-    create-objects 1 [
-      set shape "sheep" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
-      set color black
-      set size 3
-      setxy (min-pxcor + 4) 0
-      set heading 90
-    ]
-  ]
-
-  if level = "køleskab" [
-    ;;set klippe?
-    create-objects 1 [
-      set shape "fridge"
-      set color white
-      set size 3
-      setxy (min-pxcor + 4) 0
-      set heading 90
-      set choose-mass 80
-      ;;sommer
-    ]
-  ]
-
-  if level = "kat" [
+  if objekt = "kat" [
     ;;set klippe? TRUE
     create-objects 1 [
       set shape "my-cat2"
+      set object-name objekt
       set color 7
       set size 3
       setxy (min-pxcor + 4) 0
@@ -905,15 +943,82 @@ to make-object
     ]
   ]
 
+  if objekt = "kasse" [
+    ;;set klippe? TRUE
+    create-objects 1 [
+      set shape "flyttekasse"
+      set object-name objekt
+      set color 37
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 15
+    ]
+  ]
 
+  if objekt = "får" [
+    ;;set klippe? TRUE ;;nu med afgrund?
+    create-objects 1 [
+      set shape "sheep"
+      set object-name objekt
+      set color white
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 50
+    ]
+  ]
 
-  ;;@add more levels here
+   if objekt = "køleskab" [
+    ;;set klippe?
+    create-objects 1 [
+      set shape "fridge"
+      set object-name objekt
+      set color white
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 80
+      ;;sommer
+    ]
+  ]
+
+   if objekt = "bil" [
+    ;;set klippe? TRUE
+    create-objects 1 [
+      set shape "push-car" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
+      set object-name objekt
+      set color yellow
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+      set choose-mass 1400
+      ;;vinter ;;ADD THIS IN MAKE-WORLD - just here for overblik
+    ]
+  ]
+
+  if objekt = "afprøv variable" [ ;;no specified weight, for my testing only
+    ;;set klippe? TRUE
+    create-objects 1 [
+      set shape "sheep"
+      set object-name objekt
+      set color black
+      set size 3
+      setxy (min-pxcor + 4) 0
+      set heading 90
+    ]
+  ]
+
+  ;;@add more objects here
 end
 
 to genstart
   ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 5) [set plabel "" ]
   ask patch (max-pxcor - (max-pxcor / 2) - 13) (max-pycor - 8) [set plabel ""]
 
+  ask vgraphics [die] ;;the vectors
+  apply-opgave
+  ;;make-world?
   make-object
   set win? FALSE set lost? FALSE
   ask players [setxy (min-pxcor + 1) 0 set shape "person"]
@@ -1002,10 +1107,10 @@ NIL
 1
 
 BUTTON
-765
-515
-830
-548
+740
+510
+805
+543
 VENSTRE
 set action 1
 NIL
@@ -1019,10 +1124,10 @@ NIL
 1
 
 BUTTON
-835
-515
-900
-548
+810
+510
+875
+543
 HØJRE
 set action 2
 NIL
@@ -1046,32 +1151,13 @@ choose-mass
 0
 Number
 
-PLOT
-970
-285
-1450
-510
-Kræfter
-Tid
-Kraft (Newton)
-0.0
-10.0
-0.0
-0.4
-true
-true
-"" ""
-PENS
-"Friktionskraft" 1.0 0 -7500403 true "" "plot friktion"
-"Skubbekraft" 1.0 0 -955883 true "" "plot abs push-force-plot"
-
 CHOOSER
 115
 10
 207
 55
-level
-level
+objekt
+objekt
 "æble" "kat" "kasse" "får" "køleskab" "bil" "afprøv variable"
 2
 
@@ -1093,36 +1179,36 @@ NIL
 1
 
 SLIDER
-495
-530
-667
-563
+500
+510
+672
+543
 hastighed
 hastighed
 1
 100
-54.0
+41.0
 1
 1
 %
 HORIZONTAL
 
 MONITOR
-970
-110
-1100
-155
-Timer
+285
+510
+415
+555
+Tid brugt
 show-timer
 17
 1
 11
 
 MONITOR
-970
-60
-1035
-105
+220
+510
+285
+555
 Antal skub
 nr-of-pushes
 17
@@ -1136,7 +1222,7 @@ SWITCH
 93
 klippe?
 klippe?
-0
+1
 1
 -1000
 
@@ -1151,10 +1237,10 @@ styring
 1
 
 MONITOR
-1155
-215
-1245
-260
+1135
+535
+1225
+580
 Kinetisk energi
 precision kinetisk-energi 2
 17
@@ -1162,20 +1248,20 @@ precision kinetisk-energi 2
 11
 
 TEXTBOX
-1160
-265
-1365
-285
+1140
+580
+1345
+600
 kinetisk energi = 0.5 * mass * velocity^2
 11
 0.0
 1
 
 MONITOR
-1340
-520
-1450
-565
+1220
+250
+1305
+295
 Meter fra start
 object-x + 26
 2
@@ -1184,21 +1270,21 @@ object-x + 26
 
 TEXTBOX
 545
-515
+545
 630
-533
+563
 Spillets hastighed
 11
 0.0
 1
 
 TEXTBOX
-710
-555
-970
-586
+700
+545
+960
+576
 Tryk på \"J\" og \"L\" tasterne for at styre
-14
+13
 0.0
 1
 
@@ -1256,9 +1342,9 @@ my = ca 0.36 for gummi mod græs (ingen enhed)\n(hvis vinter, INGEN friktion)
 
 INPUTBOX
 30
-505
+470
 110
-565
+530
 patch-i-meter
 0.75
 1
@@ -1267,9 +1353,9 @@ Number
 
 INPUTBOX
 120
-505
+470
 200
-565
+530
 tick-i-sekunder
 0.2
 1
@@ -1287,21 +1373,10 @@ TEXTBOX
 1
 
 MONITOR
-970
-10
-1027
-55
-NIL
-try-nr
-17
-1
-11
-
-MONITOR
-1375
-365
-1445
-410
+1425
+250
+1495
+295
 Friktion
 precision friktion 2
 17
@@ -1309,10 +1384,10 @@ precision friktion 2
 11
 
 MONITOR
-1215
-520
-1332
-565
+1235
+495
+1352
+540
 Distance flyttet i alt
 precision distance-flyttet 4
 17
@@ -1328,7 +1403,7 @@ skub
 skub
 0
 300
-20.0
+58.0
 1
 1
 N
@@ -1345,22 +1420,26 @@ g på månen = 1.6
 1
 
 PLOT
-1165
+1070
 10
-1480
-210
-Absolut hastighed
-Tid
-m/s (?)
+1495
+250
+Hastighed over afstand
+Meter fra start
+Fart (m/s) (?)
 0.0
-10.0
+1.0
 0.0
-10.0
+1.0
 true
-false
-"" ""
+true
+"" "if opgave = \"Startspil\" [clear-plot auto-plot-off]"
 PENS
-"Fart" 1.0 0 -5298144 true "" "plot abs global-speed"
+"Æble" 1.0 0 -5298144 true "" "if objekt = \"æble\" [plotxy (object-x + 26) abs global-speed]"
+"Kat" 1.0 0 -7500403 true "" "if objekt = \"kat\" [plotxy (object-x + 26) abs global-speed]"
+"Kasse" 1.0 0 -6459832 true "" "if objekt = \"kasse\" [plotxy (object-x + 26) abs global-speed]"
+"Får" 1.0 0 -16777216 true "" "if objekt = \"får\" [plotxy (object-x + 26) abs global-speed]"
+"Køleskab" 1.0 0 -13345367 true "" "if objekt = \"køleskab\" [plotxy (object-x + 26) abs global-speed]"
 
 SWITCH
 115
@@ -1375,9 +1454,9 @@ vinter?
 
 TEXTBOX
 30
-485
+450
 225
-511
+476
 TESTES (fjern derefter fra interface):
 11
 0.0
@@ -1385,9 +1464,9 @@ TESTES (fjern derefter fra interface):
 
 PLOT
 975
-155
-1155
-285
+500
+1135
+620
 Kinetisk energi over tid
 Tid
 Kinetisk energi (joule)
@@ -1397,26 +1476,26 @@ Kinetisk energi (joule)
 10.0
 true
 false
-"" ""
+"" "if opgave = \"Startspil\" [clear-plot auto-plot-off]"
 PENS
 "default" 1.0 0 -10899396 true "" "plot kinetisk-energi"
 
 MONITOR
-1370
-210
-1480
-255
-Objektets hastighed
+990
+90
+1070
+135
+Hastighed
 precision v 2
 17
 1
 11
 
 MONITOR
-1375
-410
-1445
-455
+1355
+250
+1425
+295
 Skubbekraft
 abs push-force-plot
 17
@@ -1424,48 +1503,73 @@ abs push-force-plot
 11
 
 SWITCH
-295
-535
-420
-568
+70
+550
+195
+583
 vis-vektorer?
 vis-vektorer?
-0
+1
 1
 -1000
 
-MONITOR
-1100
-520
-1157
-565
-NIL
-v
-17
-1
-11
+CHOOSER
+970
+280
+1120
+325
+opgave
+opgave
+"Startspil" "Undersøg masse" "Undersøg friktion" "Undersøg skubbekraft" "Undersøg skub og træk" "Fri leg"
+0
 
-MONITOR
-945
-515
-1037
-560
-NIL
-vektor-friktion
-17
-1
-11
-
-MONITOR
-440
+TEXTBOX
+75
 535
-697
-580
-NIL
-count players with [shape = \"pushing-right\"]
+225
+553
+VEKTORER (IKKE FÆRDIGT)
+11
+0.0
+1
+
+MONITOR
+990
+135
+1070
+180
+Top-hastighed
+precision ([top-speed] of one-of objects) 2
 17
 1
 11
+
+TEXTBOX
+1010
+185
+1045
+203
+(m/s) ?
+11
+0.0
+1
+
+OUTPUT
+970
+330
+1505
+490
+11
+
+TEXTBOX
+970
+265
+1165
+291
+Vælg opgave og tryk på \"Opsætning\".
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
