@@ -1257,7 +1257,6 @@ end
 
 
 
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 225
@@ -1437,7 +1436,7 @@ CHOOSER
 styring
 styring
 "mus" "tastatur"
-0
+1
 
 MONITOR
 1280
