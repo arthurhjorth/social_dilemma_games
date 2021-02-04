@@ -13,7 +13,8 @@ globals [
   skub
   current-skub ;;til undersøg skubbekraft (opg 5)
   currently-vinter?
-  name-test ;;@for plotting?
+  my-colors ;;custom palette for plot line colors in "Fri leg"
+  color-counter ;;for plot line colors in "Fri leg"
 
   fratræk-friktion?
 
@@ -101,7 +102,6 @@ vgraphics-own [vector-name]
 
 to setup
   clear-all
-  ;;clear-all-plots clear-ticks clear-turtles clear-patches clear-drawing clear-output ;;everything from clear-all except clear-globals (want to keep try-nr)
 
   set save-list []
 
@@ -145,8 +145,6 @@ to go
 
     if not lost? and not win? [
       accelerate-object
-      ;;accelerate-object2 ;;@TESTING NEW APPROACH
-      ;;ask objects [set kinetisk-energi 0.5 * choose-mass * v ^ 2] ;;kinetisk energi er en halv gange masse gange fart i anden ;;NOW A REPORTER INSTEAD
       check-win
       update-graphics
     ]
@@ -408,7 +406,10 @@ to-report normalkraft
 end
 
 to-report arbejde
-  report abs total-push-force * distance-flyttet ;;A = F * s (enheder: joule = Newton * meter)
+  report (skub * nr-of-pushes) / tick-i-sekunder ;;divider med 0.1 = * 10
+  ;;hvor mange sekunder har vi skubbet i simuleret tid?
+
+  ;;report abs total-push-force * distance-flyttet ;;A = F * s (enheder: joule = Newton * meter)
   ;;@check: is this right? både F og s er for skub i begge retninger
 end
 
@@ -797,7 +798,7 @@ to move-right
     set shape "pushing-right"
 
 
-    if xcor > (max-pxcor - 10) [
+    if kløft? and xcor > (max-pxcor - 10) [ ;;@change to currently-kløft?
         set xcor (max-pxcor - 10) ;;the player can't move over the edge
       ]
   ]
@@ -1141,7 +1142,10 @@ to genstart
       [create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion)" )]
       [create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion)" )]
     ;;plot-pen-up
-    set plot-color one-of base-colors ;;built-in NetLogo list
+    set plot-color item color-counter base-colors ;;built-in NetLogo list ;;@change to my own custom list
+    ifelse color-counter < (length my-colors) - 1 ;;-1 since 0 indicates the first item
+      [set color-counter color-counter + 1]
+      [set color-counter 0]
   ]
 
   set win? FALSE set lost? FALSE
@@ -1204,20 +1208,20 @@ to setup-plot ;;køres i setup ('Opsætning')
 
 
  if current-opgave = "Fri leg" [ ;;mulighed for at de vælger alle objekter og begge underlag! ;;@og enhver skubbekraft! gør det dynamisk!
+      set my-colors [5 15 25 35 45 55 85 105 125 135] ;;custom list of colors used in "Fri leg"
 
-
-  ifelse vinter? [set currently-vinter? true] [set currently-vinter? false]
-  ifelse currently-vinter? = true
+    ifelse vinter? [set currently-vinter? true] [set currently-vinter? false]
+    ifelse currently-vinter? = true
       [
         create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion)" )
     ]
       [
       create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion)" )
     ]
-
-
-    ;;set plot-color one-of base-colors ;;built-in NetLogo list
-    ;;set-plot-pen-color one-of base-colors
+    set plot-color item color-counter base-colors ;;built-in NetLogo list ;;@change to my own custom list
+    ifelse color-counter < (length my-colors) - 1 ;;-1 since 0 indicates the first item
+      [set color-counter color-counter + 1]
+      [set color-counter 0]
   ]
 
 end
@@ -1230,9 +1234,6 @@ to update-plot
     plot-pen-down
     ;;@tilføj evt.: hvis samme indstillinger, skal den tidligere plot-linje slettes?
   ]
-
-
-
 
   if current-opgave = "2. Betydning af masse" [
     set-current-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg)" ) ;;pre-created in both/either Opsætning and/or Genstart
@@ -1302,19 +1303,44 @@ to update-plot
     ;;set plot-color one-of base-colors ;;this is run in setup-plot
     set-plot-pen-color plot-color
 
-;  ;;stop 'backtracking' of line to beginning (men i "Fri leg" skifter farven evt., da den ikke er fastsat - @fix det):
-;    if show-timer = 0 [
-;      plot-pen-up
-;      plotxy 0 0
-;      plot-pen-down
-;    ]
-
-    ;;if show-timer = "Spillet kører ikke endnu" [set-plot-pen-mode 2 plotxy 0 0 set-plot-pen-mode 0]
-    ;;plot-pen-down
     plotxy show-timer (abs global-speed)
 
   ]
 end
+
+
+
+;;CODE EXAMPLE FOR DEBUGGING:
+
+;to setup-plot ;;run in setup
+;  set-current-plot "Output"
+;
+;  if task = "task 4" [
+;    create-temporary-plot-pen "Fart (med friktion)"
+;    create-temporary-plot-pen "Fart (ingen friktion)"
+;  ]
+;end
+;
+;to update-plot ;;run in go
+;  if task = "task 4" [
+;    ifelse season = "vinter" [
+;      set-current-plot-pen ( word "Fart (ingen friktion)" )
+;      set-plot-pen-color plot-color + 2
+;      plotxy show-timer (abs global-speed)
+;    ]
+;    [ ;;if summer:
+;      set-current-plot-pen ( word "Fart (med friktion)" )
+;      set-plot-pen-color plot-color - 2
+;      plotxy show-timer (abs global-speed)
+;    ]
+;  ]
+;end
+
+
+
+
+
+
 @#$#@#$#@
 GRAPHICS-WINDOW
 225
@@ -1439,9 +1465,9 @@ NIL
 1
 
 SLIDER
-505
+405
 510
-677
+577
 543
 hastighed
 hastighed
@@ -1454,9 +1480,9 @@ hastighed
 HORIZONTAL
 
 MONITOR
-835
+710
 510
-965
+840
 555
 Tid brugt
 timer-interface
@@ -1465,9 +1491,9 @@ timer-interface
 11
 
 MONITOR
-770
+645
 510
-835
+710
 555
 Antal skub
 nr-of-pushes
@@ -1508,9 +1534,9 @@ object-x + 26
 11
 
 TEXTBOX
-550
+450
 545
-635
+535
 563
 Spillets hastighed
 11
@@ -1636,17 +1662,6 @@ NIL
 0.0
 1
 
-MONITOR
-1305
-540
-1395
-585
-NIL
-delta-v
-17
-1
-11
-
 SLIDER
 5
 335
@@ -1656,17 +1671,17 @@ vælg-masse
 vælg-masse
 1
 100
-15.0
+37.0
 1
 1
 kg
 HORIZONTAL
 
 TEXTBOX
-40
-320
-215
-346
+30
+310
+205
+328
 Kun til opgave 2 (og fri leg):
 12
 0.0
@@ -1675,33 +1690,23 @@ Kun til opgave 2 (og fri leg):
 TEXTBOX
 35
 370
-235
-396
+200
+388
 Vælg masse og tryk på 'Genstart'.
 11
 0.0
 1
 
 MONITOR
-1030
+840
 510
-1202
+965
 555
 Samlet arbejde udført
 arbejde-monitor
 17
 1
 11
-
-TEXTBOX
-1050
-495
-1200
-513
-@tjek fysik bag arbejde
-11
-0.0
-1
 
 MONITOR
 1350
@@ -1725,21 +1730,11 @@ precision ([top-acc] of one-of objects) 2
 1
 11
 
-TEXTBOX
-1260
-510
-1510
-566
-@tjek friktion (delta-v afhænger ikke af masse, fordi friktion trukket fra net-force? hmm)
-11
-0.0
-1
-
 SWITCH
-690
-560
-840
-593
+1065
+530
+1215
+563
 auto-indstil-opgaver?
 auto-indstil-opgaver?
 1
@@ -1747,10 +1742,10 @@ auto-indstil-opgaver?
 -1000
 
 TEXTBOX
-845
-565
-1020
-606
+1220
+535
+1395
+576
 (funktionsløs lige nu - men kan være løsning på differentiering?)
 11
 0.0
@@ -1768,35 +1763,35 @@ skub
 11
 
 SLIDER
-5
-415
-215
-448
+0
+440
+210
+473
 vælg-kraft
 vælg-kraft
 0
 1000
-150.0
+240.0
 10
 1
 N
 HORIZONTAL
 
 TEXTBOX
-40
-400
-225
-426
+25
+415
+210
+433
 Kun til opgave 5 (og fri leg):
 12
 0.0
 1
 
 TEXTBOX
-40
-450
-200
-476
+35
+475
+195
+493
 Vælg kraft og tryk på 'Genstart'.
 11
 0.0
