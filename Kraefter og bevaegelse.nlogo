@@ -9,6 +9,12 @@ globals [
   global-speed ;;for plotting @?
   choose-mass ;;objektets masse
 
+  current-vælg-masse ;til opgave 2
+  skub
+  current-skub ;;til undersøg skubbekraft (opg 5)
+  currently-vinter?
+  name-test ;;@for plotting?
+
   fratræk-friktion?
 
   win? ;;to see if they've won
@@ -26,7 +32,7 @@ globals [
   current-object
   nr-of-pushes
   distance-flyttet
-  object-plot-color ;;the color of the output graph for the current object
+  plot-color ;;the color of the output graph for the current settings (object, skubbekraft, etc)
 
   house-color-time ;;for check-win, color house green if on the right patch, keep it green for a while
 
@@ -99,6 +105,7 @@ to setup
 
   set save-list []
 
+  ifelse vinter? [set currently-vinter? true] [set currently-vinter? false]
   set current-opgave opgave
   set current-object objekt ;;gem fra chooseren til global variabel, så det ikke ændres, hvis de ændrer det
   make-world ;;cliff and season also specified here
@@ -112,7 +119,7 @@ to setup
   set nr-of-pushes 0
   set distance-flyttet 0
   set mouse-was-down? FALSE
-  set patch-i-meter 0.75 ;;@kan tweakes
+  set patch-i-meter 1 ;;@kan tweakes ;;før: 0.75
   set tick-i-sekunder 0.1 ;;@kan tweakes
   set gnidnings-kof 0.36 ;;my = ca 0.36 for gummi mod græs (ingen enhed) (applied in friction calculations if season = summer)
   set g 9.82 ;;tyngdeaccelerationen på jorden. Enhed: m/s
@@ -284,7 +291,7 @@ to accelerate-object
 
 ;;1. Calculate delta-v (acceleration or deceleration)
 
-    ;;F here should be "the vector SUM of external forces" !? så friktion er først trukket fra!
+    ;;F here should be "the vector SUM of external forces" - så friktion er først trukket fra! net-force-variabel
 
    if styring = "tastatur" [
       ifelse net-force = 0 [ ;;net-force er KUN 0, hvis objektet står stille, og der ikke skubbes (med tilstrækkelig kraft)
@@ -325,7 +332,7 @@ to accelerate-object
          ;;if no acceleration, new speed = initial speed ;;velocity can be 'negative' (to the left)
 
     ;;if object hits 'wall'/edge of world, it immediately stops (instead of just building up velocity):
-    if (object-x < min-pxcor + 0.5 and [shape != "pushing-right"] of one-of players) or (not klippe? and object-x > max-pxcor - 0.5 and [shape != "pushing-left"] of one-of players) [
+    if (object-x < min-pxcor + 0.5 and [shape != "pushing-right"] of one-of players) or (not kløft? and object-x > max-pxcor - 0.5 and [shape != "pushing-left"] of one-of players) [
       set v 0
     ]
 
@@ -368,6 +375,8 @@ to accelerate-object
     set global-speed speed ;;plots continuously
     ;;if old-speed != speed [set global-speed speed] ;;for plotting only when the speed changes @?
 
+
+
     if (abs delta-v) > top-acc [set top-acc delta-v] ;;storing top acceleration
 
     set total-push-force total-push-force + abs push-force ;;used to calculate arbejde
@@ -403,9 +412,22 @@ to-report arbejde
   ;;@check: is this right? både F og s er for skub i begge retninger
 end
 
+to-report arbejde-monitor ;;just for the interface
+  report ( word (precision arbejde 2) " joule" )
+end
+
 to-report kinetisk-energi
   report 0.5 * choose-mass * v ^ 2
 end
+
+;to-report acceleration ;;kun fra skub, ikke fra friktion
+;  if v > 0
+;
+;  ifelse delta-v > 0
+;    [report delta-v]
+;    [report 0]
+;end
+
 
 
 to check-win
@@ -722,7 +744,13 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;
 
 to move-person
-  if current-opgave = "Startspil" or current-opgave = "Undersøg masse" or current-opgave = "Undersøg masse 2" or current-opgave = "Undersøg friktion" [set skub 150] ;;@kan ændre fastsat værdi
+  if current-opgave = "1. Flytning af genstande" or current-opgave = "2. Betydning af masse"  or current-opgave = "3. Betydning af friktion" [
+    set skub 150
+  ] ;;@kan ændre fastsat værdi
+
+  if current-opgave = "5. Betydning af skubbekraft" and show-timer != "Spillet kører ikke endnu" [
+   set skub current-skub ;;så de ikke kan ændre det efter start
+  ]
 
   if styring = "tastatur" and win? = FALSE [
 
@@ -742,7 +770,7 @@ end
 to move-left
   if not lost? [
     ask players [
-    ifelse (klippe? and object-x < max-pxcor - 10) or (not klippe? and object-x < max-pxcor - 1) ;;if the sheep isn't over the edge (when lost? is too slow) OR to the very right (when no cliff)
+    ifelse (kløft? and object-x < max-pxcor - 10) or (not kløft? and object-x < max-pxcor - 1) ;;if the sheep isn't over the edge (when lost? is too slow) OR to the very right (when no cliff)
         [setxy (object-x + 1) 0]
         [setxy max-pxcor 0]
     set shape "pushing-left"
@@ -793,14 +821,14 @@ to make-world
   ask players [die]
   ask objects [die]
 
-  apply-opgave ;;fastsætter de tvungne/rette indstillinger for den valgte opgave (årstid, klippe, objekt...)
+  apply-opgave ;;fastsætter de tvungne/rette indstillinger for den valgte opgave (årstid, kløft, objekt...)
 
 
   if season = "sommer" [
   ask patches [ ;;summer sky and grass
     ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor sky] [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;summer
   ]
-    if not klippe? [
+    if not kløft? [
       ask patches [
         if pycor <= -2 [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;if no cliff, extend the grass
       ]
@@ -812,7 +840,7 @@ to make-world
     ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor 94] [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ]
     if pycor < -1 and pycor > -3 and pxcor < (max-pxcor - 9) [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
   ]
-    if not klippe? [
+    if not kløft? [
       ask patches [
         if pycor <= -2 [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ] ;;if no cliff, extend the snow
         if pycor < -1 and pycor > -3 [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
@@ -837,114 +865,99 @@ to make-world
   ask patch (max-pxcor - 1) (max-pycor - 1) [set plabel (word "Score:" score)] ;;the score counter
 end
 
-to apply-opgave
+to apply-opgave ;;køres i 'make-world' i både Opsætning og Genstart
 
-
-  if current-opgave = "Undersøg masse" [ ;;add all forced cliff-less levels here
-    ;;set klippe? FALSE
+  if current-opgave != "Fri leg" [ ;;add levels WITHOUT forced tastatur-styring
+    set styring "tastatur"
   ]
 
-  ;;if opgave = "something"  ;;add all forced cliff levels here
-      ;;[set klippe? true]
+;;KLØFT
+  if current-opgave != "Fri leg" and current-opgave != "6. Betydning af kløft" [ ;;(tilføj levels med valgfri kløft her)
+    set kløft? false ;;(ellers ingen kløft)
+  ]
 
-
- ;; if current-opgave = "" [ ;;add all the forced winter levels here
-   ;; set vinter? true
-  ;;]
-
- ;;add all the forced summer levels here:
-  if current-opgave = "Startspil" or current-opgave = "Undersøg masse" or current-opgave = "Undersøg masse 2" or current-opgave = "Undersøg skubbekraft" [
+ ;;levels med fastsat sommer:
+  if current-opgave = "1. Flytning af genstande" or current-opgave = "2. Betydning af masse"  or current-opgave = "5. Betydning af skubbekraft" or current-opgave = "6. Betydning af kløft" [
    set vinter? false
-   set skub 150 ;;@kan ændre fast værdi (også i move-person)
   ]
 
-  if current-opgave = "Undersøg friktion" [ ;;levels med fastsat skub (også ovenfor)
-    set skub 150
+  ;;levels med fastsat skub:
+  if current-opgave = "1. Flytning af genstande" or current-opgave = "2. Betydning af masse"  or current-opgave = "3. Betydning af friktion" or current-opgave = "6. Betydning af kløft" [
+    set skub 150 ;;@kan ændre fast værdi (også i move-person)
+  ]
+
+   ;;valgfrit skub:
+  if current-opgave = "5. Betydning af skubbekraft" or current-opgave = "Fri leg" [
+    set skub vælg-kraft set current-skub skub
   ]
 
 
  ;;forced objects:
-  if current-opgave = "Startspil" or current-opgave = "Undersøg friktion" or current-opgave = "Undersøg masse 2" [
+  if current-opgave = "2. Betydning af masse" or current-opgave = "3. Betydning af friktion" or current-opgave = "5. Betydning af skubbekraft" [
     set objekt "kasse"
   ]
 
   set current-object objekt
 
-
-  ;;^^by not adding the free levels to these, they can then still choose cliff or winter themselves using the switch (and cliff is applied in make-world):
+  ;;by not adding the free levels to these, they can then still choose cliff or winter themselves using the switch (and cliff is applied in make-world):
   ifelse vinter?
     [set season "vinter"]
     [set season "sommer"]
 end
 
 to vis-instruks ;;køres i setup
-  if current-opgave = "Startspil" [
-    output-print "STARTSPIL"
+  if current-opgave = "1. Flytning af genstande" [ ;;@...
+    output-print "FLYTNING AF GENSTANDE"
     output-print "Hej! Vil du hjælpe mig med at flytte ind i mit nye hus?"
-    output-print "1. Tryk på 'Spil'."
-    output-print "2. Skub til flyttekassen med 'J' og 'L' tasterne på tastaturet."
-    output-print "Skub kassen hen foran huset. Den skal ligge helt stille."
-    output-print "- Hvor hurtigt kan du gøre det?"
-    output-print "- Hvor få skub kan du gøre det i?"
-    output-print "Tryk på 'Genstart' for at starte forfra."
-    output-print "Held og lykke! :)"
-    output-print "PS. Du kan også prøve at sætte klippe? på ON og trykke på 'Opsætning'."
-    output-print "PPS. Vær forsigtig med mine ting!"
+    output-print "    1. Vælg en genstand i 'objekt'-drop-down-menuen."
+    output-print "    2. Tryk på 'Genstart'."
+    output-print "    3. Tryk på 'Spil'."
+    output-print "    4. Skub til genstanden med 'J' og 'L' tasterne på tastaturet."
+    output-print "    5. Skub genstanden hen foran huset. Den skal ligge helt stille."
+    output-print "(- spørgsmål her?)"
+    output-print "(- guide til output her?)"
+
   ]
 
-  if current-opgave = "Undersøg masse" [
-    output-print "UNDERSØG MASSE"
-    output-print "Hmm... Nogle af mine ting er tungere end andre."
-    output-print "Hvordan påvirker massen mon objektets FART og BEVÆGELSESAFSTAND?"
-    output-print "1. Vælg et objekt i drop-down-menuen."
-    output-print "2. Tryk på 'Genstart'."
-    output-print "3. Skub til tingen!"
+  if current-opgave = "2. Betydning af masse" [
+    output-print "BETYDNING AF MASSE"
+    output-print "Jeg kan variere, hvor tungt jeg pakker mine flyttekasser..."
+    output-print "Hvordan påvirker massen kassens fart, bevægelseslængde og acceleration?"
+    output-print "    1. Vælg en masse for flyttekassen med 'vælg-masse'-slideren."
+    output-print "    2. Tryk på 'Genstart'."
+    output-print "    3. Skub til kassen!"
     output-print "Du kan se bevægelsesafstanden i 'Meter fra start'."
-    output-print "Output-plottet viser objekternes fart over tid."
-    output-print "- Hvilke objekter er nemmest at få op i fart?"
-    output-print "- (f.eks. ) Prøv at give forskellige objekter ET skub med samme kraft.)"
+    output-print "Grafen viser kassens fart over tid."
+    output-print "- (mere her?)"
     output-print "PS. Tryk på 'Opsætning', hvis du vil viske plottet rent"
   ]
 
-  if current-opgave = "Undersøg masse 2" [
-    output-print "UNDERSØG MASSE 2"
-    output-print "Jeg har vist lidt flere flyttekasser..."
-    output-print "(Hvor meget synes du, jeg skal fylde dem op?)"
-    output-print "(Justér selv præcist, hvad kassen vejer!)"
-    output-print "(Og se, hvordan det påvirker kassens FART og BEVÆGELSESLÆNGDE...)"
-    output-print "..."
-    output-print "Du kan se bevægelsesafstanden i 'Meter fra start'."
-    output-print "Output-plottet viser objekternes fart over tid."
-    output-print "- (se, hvordan massen påvirker kassens FART og BEVÆGELSESLÆNGDE...)"
-    output-print "PS. Tryk på 'Opsætning', hvis du vil viske plottet rent"
-  ]
-
-
-  if current-opgave = "Undersøg friktion" [
-    output-print "UNDERSØG FRIKTION"
+    if current-opgave = "3. Betydning af friktion" [
+    output-print "BETYDNING AF FRIKTION"
     output-print "Hvad nu, hvis jeg flyttede ind om vinteren i stedet...?"
-    output-print "Hvordan påvirker underlaget mon FART og BEVÆGELSESAFSTAND?"
-    output-print "1. Vælg årstid med vinter?-kontakten."
-    output-print "2. Tryk på 'Genstart'."
-    output-print "3. Skub til kassen."
-    output-print "Output-plottet viser kassens fart over tid."
+    output-print "Hvilken betydning har underlagets friktion/gnidningsmodstand?"
+    output-print "    1. Vælg årstid med vinter?-kontakten."
+    output-print "    2. Tryk på 'Genstart'."
+    output-print "    3. Skub til kassen."
+    output-print "Du kan se bevægelsesafstanden i 'Meter fra start'."
+    output-print "Grafen viser kassens fart over tid."
     output-print "Prøv at skubbe til kassen både om sommeren og vinteren."
-    output-print "- Hvilken forskel gør underlaget?"
-    output-print "- (andre spørgsmål om friktion?)"
+    output-print "- (spørgsmål eller andet her?)"
     output-print "PS. Tryk på Opsætning, hvis du vil viske plottet rent"
   ]
 
-  if current-opgave = "Undersøg skubbekraft" [
-    output-print "UNDERSØG SKUBBEKRAFT"
+  if current-opgave = "5. Betydning af skubbekraft" [
+    output-print "BETYDNING AF SKUBBEKRAFT"
     output-print "Hvad nu, hvis jeg varierer, hvor hårdt jeg skubber...?"
-    output-print "Hvordan påvirker skubbekraftens størrelse FART og BEVÆGELSESAFSTAND?"
-    output-print "1. Vælg størrelsen på skubbekraften med 'skub'-slideren."
-    output-print "2. Skub til kassen."
-    output-print "-(kan du finde en skubbekraft, som får kassen i mål på ET enkelt skub?)"
-    output-print "(- andre spørgsmål om skubbekraft?)"
-    output-print "Du kan ændre størrelsen på kraften undervejs i et forsøg, hvis du vil."
-    output-print "(P.S: Med klippe?-kontakten kan du selv vælge... (?))"
-    output-print "(bare tryk på genstart bagefter...)"
+    output-print "Hvilken betydning har kraften i skubbet?"
+    output-print "    1. Vælg størrelsen på skubbekraften med 'vælg-kraft'-slideren."
+    output-print "    2. Tryk på 'Genstart'."
+    output-print "    3. Skub til kassen."
+    output-print "Du kan se bevægelsesafstanden i 'Meter fra start'."
+    output-print "Grafen viser kassens fart over tid."
+    output-print "- (evt. find den skubbekraft, som får massen i mål på ET enkelt skub?)"
+    output-print "(lige nu kan man ikke ændre kraften undervejs i et forsøg!)"
+    output-print "PS. Tryk på Opsætning, hvis du vil viske plottet rent"
   ]
 
   if current-opgave = "(Undersøg skub og træk)" [
@@ -953,16 +966,30 @@ to vis-instruks ;;køres i setup
     output-print "(ikke færdigt endnu)"
   ]
 
+  if current-opgave = "6. Betydning af kløft" [
+    output-print "BETYDNING AF KLØFT"
+    output-print "Jeg har altid drømt om et hus med udsigt..."
+    output-print "Men pas nu på, at mine ting ikke ryger ud over kanten!"
+    output-print "    1. Brug 'kløft?'-kontakten til at vælge, om der skal være en kløft."
+    output-print "    2. Vælg en genstand i 'objekt'-drop-down-menuen."
+    output-print "    3. Tryk på 'Genstart'."
+    output-print "    4. Skub genstanden hen til huset."
+    output-print "(uden kløft er det her magen til opgave 1)"
+    output-print "(- prøv at gøre det så effektivt som muligt?)"
+    output-print "(output: 'Antal skub', 'Tid brugt', 'Samlet arbejde udført')"
+    output-print "(skal plottet også være tændt og vise fart over tid???)"
+  ]
+
 
   if current-opgave = "Fri leg" [
     output-print "FRI LEG"
     output-print "Nu har du muligheden for at ændre på lige, hvad du vil!"
-    output-print "1. Vælg dine indstillinger. Du kan ændre:"
-    output-print "    Objekt, klippe, årstid, skubbekraft"
-    output-print "2. Tryk på 'Genstart'. "
-    output-print "3. Skub til tingen! Her er nogle udfordringer:"
-    output-print "- Min bil er godt nok tung... kan du få den hen til huset?"
-    output-print "- (endnu en udfordring)"
+    output-print "    1. Indstil: Masse (vælg-masse), skubbekraft (vælg-kraft),"
+    output-print "    friktion (vinter?), landskab (kløft?), udseende (objekt)."
+    output-print "    2. Tryk på 'Genstart', når du har valgt dine indstillinger. "
+    output-print "    3. Skub til tingen!"
+    output-print "- Udfordring: Min bil er godt nok tung... kan du få den hen til huset?"
+    output-print "(^^men virker kun, hvis vi gør så de ikke kan justere massen selv)"
     output-print "PS. Tryk på Opsætning, hvis du vil viske plottet rent"
     output-print "PPS. Tak for flyttehjælpen! NU har jeg brug for at slappe af..."
     output-print "    ... men hov, jeg glemte vist helt at pakke min sofa!!!"
@@ -992,7 +1019,7 @@ to make-object
 ;;;;;;;;;;;;
 
   if objekt = "æble" [
-    ;;set klippe? FALSE ;;ingen afgrund?
+    ;;set kløft? FALSE ;;ingen afgrund?
     create-objects 1 [
       set shape "apple-small"
       set object-name objekt ;;turtle variable
@@ -1001,12 +1028,12 @@ to make-object
       setxy (min-pxcor + 4) 0
       set heading 90
       set choose-mass 0.2
-      set object-plot-color red ;;a global that determines the output plot line color for this object
+      set plot-color red ;;a global that determines the output plot line color for this object
     ]
   ]
 
   if objekt = "kat" [
-    ;;set klippe? TRUE
+    ;;set kløft? TRUE
     create-objects 1 [
       set shape "my-cat2"
       set object-name objekt
@@ -1015,12 +1042,12 @@ to make-object
       setxy (min-pxcor + 4) 0
       set heading 90
       set choose-mass 5
-      set object-plot-color grey
+      set plot-color grey
     ]
   ]
 
   if objekt = "kasse" [
-    ;;set klippe? TRUE
+    ;;set kløft? TRUE
     create-objects 1 [
       set shape "flyttekasse"
       set object-name objekt
@@ -1028,13 +1055,13 @@ to make-object
       set size 3
       setxy (min-pxcor + 4) 0
       set heading 90
-      if current-opgave != "Undersøg masse 2" [set choose-mass 15] ;;i undersøg masse 2 skal de selv kunne styre massen
-      set object-plot-color brown
+      set choose-mass 15
+      set plot-color brown
     ]
   ]
 
   if objekt = "får" [
-    ;;set klippe? TRUE ;;nu med afgrund?
+    ;;set kløft? TRUE ;;nu med afgrund?
     create-objects 1 [
       set shape "sheep"
       set object-name objekt
@@ -1043,12 +1070,12 @@ to make-object
       setxy (min-pxcor + 4) 0
       set heading 90
       set choose-mass 50
-      set object-plot-color green
+      set plot-color green
     ]
   ]
 
    if objekt = "køleskab" [
-    ;;set klippe?
+    ;;set kløft?
     create-objects 1 [
       set shape "fridge"
       set object-name objekt
@@ -1057,12 +1084,12 @@ to make-object
       setxy (min-pxcor + 4) 0
       set heading 90
       set choose-mass 80
-      set object-plot-color blue
+      set plot-color blue
     ]
   ]
 
    if objekt = "bil" [
-    ;;set klippe? TRUE
+    ;;set kløft? TRUE
     create-objects 1 [
       set shape "push-car" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
       set object-name objekt
@@ -1071,27 +1098,21 @@ to make-object
       setxy (min-pxcor + 4) 0
       set heading 90
       set choose-mass 1400
-      set object-plot-color yellow
+      set plot-color yellow
     ]
   ]
 
-  if objekt = "afprøv variable" [ ;;no specified weight, for my testing only
-    ;;set klippe? TRUE
-    create-objects 1 [
-      set shape "sheep"
-      set object-name objekt
-      set color black
-      set size 3
-      setxy (min-pxcor + 4) 0
-      set heading 90
-      set object-plot-color pink
-    ]
-  ]
 
-  ;;@add more objects here
+
+;;overwrite choose-mass hvis de selv styrer massen:
+  if current-opgave = "2. Betydning af masse" or current-opgave = "Fri leg"
+     [set choose-mass vælg-masse set current-vælg-masse vælg-masse] ;;når de selv varierer massen med interface-slider
+
 end
 
 to genstart
+
+
   ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 5) [set plabel "" ]
   ask patch (max-pxcor - (max-pxcor / 2) - 13) (max-pycor - 8) [set plabel ""]
 
@@ -1099,8 +1120,29 @@ to genstart
 
   set current-opgave opgave
   set current-object objekt ;;gem fra chooseren til global variabel, så det ikke ændres, hvis de ændrer det
+  ifelse vinter? [set currently-vinter? true] [set currently-vinter? false]
+  ;;set current-vælg-masse vælg-masse
+  ;;set current-skub vælg-kraft
+
   make-world
   make-object
+
+
+;;dynamic plot pens:
+  if current-opgave = "2. Betydning af masse" [ ;;kaldes i 'Genstart' OG 'setup' (til opgave med varierende masse)
+    create-temporary-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg)" )
+  ]
+  if current-opgave = "5. Betydning af skubbekraft" [ ;;kaldes i 'Genstart' OG setup (varierende skubbekraft)
+    create-temporary-plot-pen ( word "Fart (skub på " current-skub " N)" ) ;;kun hvis de ikke må ændre skubbekraften undervejs i forsøget! ;;kan gøres sådan
+  ]
+   if current-opgave = "Fri leg" [ ;;mulighed for at de vælger alle objekter og begge underlag! ;;@og enhver skubbekraft! gør det dynamisk!
+     ;;plot-pen-reset ;;@?
+    ifelse vinter?
+      [create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion)" )]
+      [create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion)" )]
+    ;;plot-pen-up
+    set plot-color one-of base-colors ;;built-in NetLogo list
+  ]
 
   set win? FALSE set lost? FALSE
   ask players [setxy (min-pxcor + 1) 0 set shape "person"]
@@ -1112,6 +1154,8 @@ to genstart
   set nr-of-pushes 0 ;;@could save a total nr of pushes across levels?
   set distance-flyttet 0 ;;@igen: could save cumulative across levels
   set timer-running? FALSE ;;so the timer can start over again with their first push
+
+
 
 end
 
@@ -1133,130 +1177,144 @@ end
 
 
 ;;PLOTS
-to setup-plot
+to setup-plot ;;køres i setup ('Opsætning')
   set-current-plot "Output"
 
-  if current-opgave = "Undersøg masse" [
-    create-temporary-plot-pen "Fart (æble)"
-    create-temporary-plot-pen "Fart (kat)"
-    create-temporary-plot-pen "Fart (kasse)"
-    create-temporary-plot-pen "Fart (får)"
-    create-temporary-plot-pen "Fart (køleskab)"
-    create-temporary-plot-pen "Fart (bil)"
-  ]
 
-  if current-opgave = "Undersøg masse 2" [ ;;@make plot pens work for when they determine the mass themselves! (maybe have this setup right after they choose object?
+  if current-opgave = "2. Betydning af masse" [ ;;den her kaldes også i 'Genstart'
+    create-temporary-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg)" )
     ;;also add in update-plot
   ]
 
+  if current-opgave = "3. Betydning af friktion" [
+    create-temporary-plot-pen "Fart (med friktion)"
+    create-temporary-plot-pen "Fart (ingen friktion)"
+  ]
 
+;  if current-opgave = "4. Masse og friktion" [
+;    ;
+;  ]
 
-  if current-opgave = "Undersøg friktion" [
-    create-temporary-plot-pen "Fart (kasse)"
-    create-temporary-plot-pen "Fart (kasse) (is)"
+  if current-opgave = "5. Betydning af skubbekraft" [ ;;den her kaldes også i 'Genstart'
+    create-temporary-plot-pen ( word "Fart (skub på " current-skub " N)" ) ;;kun hvis de ikke må ændre skubbekraften undervejs i forsøget! ;;kan gøres sådan
+    ;;ellers bare:
+    ;;create-temporary-plot-pen "Fart"
   ]
 
 
- if current-opgave = "Fri leg" [ ;;mulighed for at de vælger alle objekter og begge underlag!
-    create-temporary-plot-pen "Fart (æble)"
-    create-temporary-plot-pen "Fart (æble) (is)"
-    create-temporary-plot-pen "Fart (kat)"
-    create-temporary-plot-pen "Fart (kat) (is)"
-    create-temporary-plot-pen "Fart (kasse)"
-    create-temporary-plot-pen "Fart (kasse) (is)"
-    create-temporary-plot-pen "Fart (får)"
-    create-temporary-plot-pen "Fart (får) (is)"
-    create-temporary-plot-pen "Fart (køleskab)"
-    create-temporary-plot-pen "Fart (køleskab) (is)"
-    create-temporary-plot-pen "Fart (bil)"
-    create-temporary-plot-pen "Fart (bil) (is)"
+
+ if current-opgave = "Fri leg" [ ;;mulighed for at de vælger alle objekter og begge underlag! ;;@og enhver skubbekraft! gør det dynamisk!
+
+
+  ifelse vinter? [set currently-vinter? true] [set currently-vinter? false]
+  ifelse currently-vinter? = true
+      [
+        create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion)" )
+    ]
+      [
+      create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion)" )
+    ]
+
+
+    ;;set plot-color one-of base-colors ;;built-in NetLogo list
+    ;;set-plot-pen-color one-of base-colors
   ]
-
-
 
 end
 
 to update-plot
-  ;;plot-pen-up? ;;@GET RID OF 'back-tracking line' hvis det samme objekt vælges igen!
+    ;;stop 'backtracking' of line to beginning (men i "Fri leg" skifter farven på legend og ny linje, da den ikke er fastsat - @fix det):
+  if show-timer = 0 and current-opgave != "1. Flytning af genstande" and current-opgave != "6. Betydning af kløft" [ ;;@skift her, hvis kløft skal vise plot
+    plot-pen-up
+    plotxy 0 0
+    plot-pen-down
+    ;;@tilføj evt.: hvis samme indstillinger, skal den tidligere plot-linje slettes?
+  ]
 
 
 
-  if current-opgave = "Undersøg masse" [
-    set-current-plot-pen ( word "Fart (" current-object ")" ) ;;pre-created plot pens in setup-plot
-    set-plot-pen-color object-plot-color ;;a global set in make-object, unique color for each object
+
+  if current-opgave = "2. Betydning af masse" [
+    set-current-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg)" ) ;;pre-created in both/either Opsætning and/or Genstart
+
+  ;;set pen color depending on the chosen mass:
+    let vælg-masse-string (word current-vælg-masse) ;from number to string
+    ifelse current-vælg-masse >= 10
+      [
+        let first-digit first vælg-masse-string
+        set plot-color (word first-digit 5)
+
+        if current-vælg-masse > 99 [ ;;special case hvis den er præcis 100
+          set plot-color "115"
+        ]
+    ]
+      [ ;;if mass < 10:
+      set plot-color "5"
+    ]
+
+    set-plot-pen-color read-from-string plot-color ;;@make it random/visualising the different weights! a gradient!
+    plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+
+  ]
+
+
+  if current-opgave = "3. Betydning af friktion" [
+    ifelse season = "vinter" [
+      set-current-plot-pen ( word "Fart (ingen friktion)" )
+      set-plot-pen-color plot-color + 2 ;;@can tweak plot colors to make more readable
+      plotxy show-timer (abs global-speed)
+    ]
+    [ ;;if summer:
+      set-current-plot-pen ( word "Fart (med friktion)" )
+      set-plot-pen-color plot-color - 2 ;;@can tweak plot colors to make more readable
+      plotxy show-timer (abs global-speed)
+    ]
+  ]
+
+
+  if current-opgave = "5. Betydning af skubbekraft" [
+    set-current-plot-pen ( word "Fart (skub på " current-skub " N)" )
+
+  ;;pen color depends on the size of the skubbekraft:
+    ifelse current-skub >= 100
+    [
+      let first-digit first (word current-skub)
+      set plot-color (word first-digit 5)
+
+        if current-skub > 999 [ ;;special case hvis den er præcis 1000
+          set plot-color "115"
+        ]
+    ]
+    [ ;;if skub < 100:
+      set plot-color "5"
+    ]
+
+    set-plot-pen-color read-from-string plot-color
     plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
   ]
 
 
-  if current-opgave = "Undersøg friktion" [
-    ifelse season = "vinter" [
-      set-current-plot-pen ( word "Fart (" current-object ") (is)" )
-      set-plot-pen-color object-plot-color + 2 ;;@can tweak plot colors to make more readable
-      plotxy show-timer (abs global-speed)
-    ]
-    [ ;;if summer:
-      set-current-plot-pen ( word "Fart (" current-object ")" )
-      set-plot-pen-color object-plot-color - 2 ;;@can tweak plot colors to make more readable
-      plotxy show-timer (abs global-speed)
-    ]
-  ]
-
   if current-opgave = "Fri leg" [
-    ifelse season = "vinter" [
-      set-current-plot-pen ( word "Fart (" current-object ") (is)" )
-      set-plot-pen-color object-plot-color + 2 ;;@can tweak plot colors to make more readable
-      plotxy show-timer (abs global-speed)
-    ]
-    [ ;;if summer:
-      set-current-plot-pen ( word "Fart (" current-object ")" )
-      set-plot-pen-color object-plot-color - 2 ;;@can tweak plot colors to make more readable
-      plotxy show-timer (abs global-speed)
-    ]
+    ifelse currently-vinter? = true
+      [set-current-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion)" )]
+      [set-current-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion)" )]
+
+    ;;set plot-color one-of base-colors ;;this is run in setup-plot
+    set-plot-pen-color plot-color
+
+;  ;;stop 'backtracking' of line to beginning (men i "Fri leg" skifter farven evt., da den ikke er fastsat - @fix det):
+;    if show-timer = 0 [
+;      plot-pen-up
+;      plotxy 0 0
+;      plot-pen-down
+;    ]
+
+    ;;if show-timer = "Spillet kører ikke endnu" [set-plot-pen-mode 2 plotxy 0 0 set-plot-pen-mode 0]
+    ;;plot-pen-down
+    plotxy show-timer (abs global-speed)
+
   ]
-
-
-
-
-
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 225
@@ -1287,9 +1345,9 @@ ticks
 
 BUTTON
 10
-190
+185
 80
-223
+218
 Opsætning
 setup
 NIL
@@ -1304,9 +1362,9 @@ NIL
 
 BUTTON
 85
-190
+185
 148
-223
+218
 Spil
 go
 T
@@ -1320,9 +1378,9 @@ NIL
 1
 
 BUTTON
-745
+225
 510
-810
+290
 543
 VENSTRE
 set action 1
@@ -1337,9 +1395,9 @@ NIL
 1
 
 BUTTON
-815
+290
 510
-880
+355
 543
 HØJRE
 set action 2
@@ -1354,20 +1412,20 @@ NIL
 1
 
 CHOOSER
-100
+110
 95
-192
+205
 140
 objekt
 objekt
-"æble" "kat" "kasse" "får" "køleskab" "bil" "afprøv variable"
+"æble" "kat" "kasse" "får" "køleskab" "bil"
 2
 
 BUTTON
 155
-190
+185
 215
-225
+220
 Genstart
 genstart
 NIL
@@ -1389,16 +1447,16 @@ hastighed
 hastighed
 1
 100
-43.0
+42.0
 1
 1
 %
 HORIZONTAL
 
 MONITOR
-290
+835
 510
-420
+965
 555
 Tid brugt
 timer-interface
@@ -1407,9 +1465,9 @@ timer-interface
 11
 
 MONITOR
-225
+770
 510
-290
+835
 555
 Antal skub
 nr-of-pushes
@@ -1418,20 +1476,20 @@ nr-of-pushes
 11
 
 SWITCH
-10
+20
 145
-100
+110
 178
-klippe?
-klippe?
+kløft?
+kløft?
 1
 1
 -1000
 
 CHOOSER
-10
+20
 95
-102
+112
 140
 styring
 styring
@@ -1439,10 +1497,10 @@ styring
 1
 
 MONITOR
-1280
-525
-1365
-570
+1120
+435
+1205
+480
 Meter fra start
 object-x + 26
 2
@@ -1460,39 +1518,24 @@ Spillets hastighed
 1
 
 MONITOR
-1425
-250
-1495
-295
+1430
+435
+1500
+480
 Friktion
 precision friktion 2
 17
 1
 11
 
-SLIDER
-10
-230
-220
-263
-skub
-skub
-0
-1000
-150.0
-10
-1
-N
-HORIZONTAL
-
 PLOT
 970
-10
-1495
-250
+195
+1505
+435
 Output
 Tid
-y
+Fart
 0.0
 1.0
 0.0
@@ -1503,9 +1546,9 @@ true
 PENS
 
 SWITCH
-100
+115
 145
-190
+205
 178
 vinter?
 vinter?
@@ -1514,10 +1557,10 @@ vinter?
 -1000
 
 MONITOR
-1205
-510
-1282
-555
+970
+435
+1047
+480
 Fart
 precision (abs v) 2
 17
@@ -1525,20 +1568,20 @@ precision (abs v) 2
 11
 
 CHOOSER
-10
+20
 45
-197
+205
 90
 opgave
 opgave
-"Startspil" "Undersøg masse" "Undersøg friktion" "Undersøg skubbekraft" "Fri leg" "(Undersøg skub og træk)"
+"1. Flytning af genstande" "2. Betydning af masse" "3. Betydning af friktion" "(4. Masse og friktion)" "5. Betydning af skubbekraft" "6. Betydning af kløft" "Fri leg"
 0
 
 MONITOR
-1205
-555
-1282
-600
+1045
+435
+1122
+480
 Topfart
 precision (abs [top-speed] of one-of objects) 2
 17
@@ -1547,15 +1590,15 @@ precision (abs [top-speed] of one-of objects) 2
 
 OUTPUT
 970
-330
+30
 1505
-490
+190
 11
 
 TEXTBOX
+20
 10
-10
-225
+200
 50
 1. Vælg opgave og tryk på 'Opsætning'.
 13
@@ -1563,10 +1606,10 @@ TEXTBOX
 1
 
 MONITOR
-160
-45
+125
 225
-90
+190
+270
 Masse (kg)
 choose-mass
 17
@@ -1575,9 +1618,9 @@ choose-mass
 
 TEXTBOX
 975
-310
+10
 1205
-330
+30
 2. Læs instrukser herunder
 13
 0.0
@@ -1589,6 +1632,172 @@ TEXTBOX
 920
 623
 NIL
+11
+0.0
+1
+
+MONITOR
+1305
+540
+1395
+585
+NIL
+delta-v
+17
+1
+11
+
+SLIDER
+5
+335
+215
+368
+vælg-masse
+vælg-masse
+1
+100
+15.0
+1
+1
+kg
+HORIZONTAL
+
+TEXTBOX
+40
+320
+215
+346
+Kun til opgave 2 (og fri leg):
+12
+0.0
+1
+
+TEXTBOX
+35
+370
+235
+396
+Vælg masse og tryk på 'Genstart'.
+11
+0.0
+1
+
+MONITOR
+1030
+510
+1202
+555
+Samlet arbejde udført
+arbejde-monitor
+17
+1
+11
+
+TEXTBOX
+1050
+495
+1200
+513
+@tjek fysik bag arbejde
+11
+0.0
+1
+
+MONITOR
+1350
+435
+1430
+480
+Kinetisk energi
+precision kinetisk-energi 2
+17
+1
+11
+
+MONITOR
+1205
+435
+1300
+480
+Top-acceleration
+precision ([top-acc] of one-of objects) 2
+17
+1
+11
+
+TEXTBOX
+1260
+510
+1510
+566
+@tjek friktion (delta-v afhænger ikke af masse, fordi friktion trukket fra net-force? hmm)
+11
+0.0
+1
+
+SWITCH
+690
+560
+840
+593
+auto-indstil-opgaver?
+auto-indstil-opgaver?
+1
+1
+-1000
+
+TEXTBOX
+845
+565
+1020
+606
+(funktionsløs lige nu - men kan være løsning på differentiering?)
+11
+0.0
+1
+
+MONITOR
+35
+225
+125
+270
+Skubbekraft (N)
+skub
+17
+1
+11
+
+SLIDER
+5
+415
+215
+448
+vælg-kraft
+vælg-kraft
+0
+1000
+150.0
+10
+1
+N
+HORIZONTAL
+
+TEXTBOX
+40
+400
+225
+426
+Kun til opgave 5 (og fri leg):
+12
+0.0
+1
+
+TEXTBOX
+40
+450
+200
+476
+Vælg kraft og tryk på 'Genstart'.
 11
 0.0
 1
