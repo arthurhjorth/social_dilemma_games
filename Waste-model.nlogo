@@ -41,8 +41,17 @@ to make-world
    set pcolor scale-color 104 ((random 500) + 3000) 0 6500 ;;horizon line
   ]
 
-  ;;birds in sky:
+  ;;sun:
+  ask patch (min-pxcor + 15) (max-pycor - 10) [
+    sprout-props 1 [ ;;outline
+      set shape "sun" set color 44 set size 15
+    ]
+    sprout-props 1 [ ;;fill-in
+      set shape "sun" set color 47 set size 13
+    ]
+  ]
 
+  ;;birds in sky:
   create-props 1 [
     set shape "bird-v" set color black set size 9 setxy 79 90 set heading 14
   ]
@@ -552,6 +561,19 @@ star
 false
 0
 Polygon -7500403 true true 151 1 185 108 298 108 207 175 242 282 151 216 59 282 94 175 3 108 116 108
+
+sun
+false
+0
+Circle -7500403 true true 75 75 150
+Polygon -7500403 true true 300 150 240 120 240 180
+Polygon -7500403 true true 150 0 120 60 180 60
+Polygon -7500403 true true 150 300 120 240 180 240
+Polygon -7500403 true true 0 150 60 120 60 180
+Polygon -7500403 true true 60 195 105 240 45 255
+Polygon -7500403 true true 60 105 105 60 45 45
+Polygon -7500403 true true 195 60 240 105 255 45
+Polygon -7500403 true true 240 195 195 240 255 255
 
 target
 false
