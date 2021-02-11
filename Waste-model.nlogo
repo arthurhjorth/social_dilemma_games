@@ -339,16 +339,15 @@ to visualize
     ]
   ]
 end
-
 @#$#@#$#@
 GRAPHICS-WINDOW
-1175
-15
-1503
-344
+1180
+10
+1483
+314
 -1
 -1
-2.49
+1.47
 1
 10
 1
@@ -369,9 +368,9 @@ ticks
 30.0
 
 BUTTON
-30
+50
 15
-93
+113
 48
 NIL
 setup
@@ -446,7 +445,7 @@ INPUTBOX
 620
 215
 waste-nr
-5.0
+3.0
 1
 0
 Number
@@ -459,7 +458,7 @@ CHOOSER
 choose-waste-type
 choose-waste-type
 "(type custom waste)" "plastic bottle(s)" "plastic bag(s)" "plastic package(s)" "plastic cutlery" "plastic straw(s)"
-2
+1
 
 MONITOR
 625
@@ -618,7 +617,7 @@ CHOOSER
 calculate-this
 calculate-this
 "amount" "CO2 pollution" "(other things)"
-1
+0
 
 TEXTBOX
 285
