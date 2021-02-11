@@ -68,6 +68,9 @@ globals [
   u ;;initial/current speed
   final-displacement ;;after scaling
 
+  ; JB - Track each `Genstart` to give a unique plot name
+  genstart-number
+
 ]
 
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
@@ -1112,7 +1115,8 @@ to make-object
 end
 
 to genstart
-
+  ; JB - Track each `Genstart` for different plot names
+  set genstart-number (genstart-number + 1)
 
   ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 5) [set plabel "" ]
   ask patch (max-pxcor - (max-pxcor / 2) - 13) (max-pycor - 8) [set plabel ""]
@@ -1130,22 +1134,42 @@ to genstart
 
 
 ;;dynamic plot pens:
+
   if current-opgave = "2. Betydning af masse" [ ;;kaldes i 'Genstart' OG 'setup' (til opgave med varierende masse)
-    create-temporary-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg)" )
+    create-temporary-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg) " genstart-number )
+
+    ;;workaround:
+    plot-pen-up
+    plotxy 0 0
+    plot-pen-down
+
   ]
+
   if current-opgave = "5. Betydning af skubbekraft" [ ;;kaldes i 'Genstart' OG setup (varierende skubbekraft)
-    create-temporary-plot-pen ( word "Fart (skub på " current-skub " N)" ) ;;kun hvis de ikke må ændre skubbekraften undervejs i forsøget! ;;kan gøres sådan
+    create-temporary-plot-pen ( word "Fart (skub på " current-skub " N) " genstart-number ) ;;kun hvis de ikke må ændre skubbekraften undervejs i forsøget! ;;kan gøres sådan
+
+    ;;workaround:
+    plot-pen-up
+    plotxy 0 0
+    plot-pen-down
   ]
+
    if current-opgave = "Fri leg" [ ;;mulighed for at de vælger alle objekter og begge underlag! ;;@og enhver skubbekraft! gør det dynamisk!
      ;;plot-pen-reset ;;@?
     ifelse vinter?
-      [create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion)" )]
-      [create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion)" )]
+      [create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion) " genstart-number )]
+      [create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion) " genstart-number )]
     ;;plot-pen-up
     set plot-color item color-counter base-colors ;;built-in NetLogo list ;;@change to my own custom list
     ifelse color-counter < (length my-colors) - 1 ;;-1 since 0 indicates the first item
       [set color-counter color-counter + 1]
       [set color-counter 0]
+
+    ; JB - Workaround for zeroing plots issue - plot the starting `plotxy 0 0` so we don't do it as part of `update-plot`
+    set-plot-pen-color plot-color
+    plot-pen-up
+    plotxy 0 0
+    plot-pen-down
   ]
 
   set win? FALSE set lost? FALSE
@@ -1186,8 +1210,11 @@ to setup-plot ;;køres i setup ('Opsætning')
 
 
   if current-opgave = "2. Betydning af masse" [ ;;den her kaldes også i 'Genstart'
-    create-temporary-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg)" )
-    ;;also add in update-plot
+    create-temporary-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg) " genstart-number )
+
+    ;;workaroud:
+    plotxy 0 0
+
   ]
 
   if current-opgave = "3. Betydning af friktion" [
@@ -1200,9 +1227,11 @@ to setup-plot ;;køres i setup ('Opsætning')
 ;  ]
 
   if current-opgave = "5. Betydning af skubbekraft" [ ;;den her kaldes også i 'Genstart'
-    create-temporary-plot-pen ( word "Fart (skub på " current-skub " N)" ) ;;kun hvis de ikke må ændre skubbekraften undervejs i forsøget! ;;kan gøres sådan
-    ;;ellers bare:
-    ;;create-temporary-plot-pen "Fart"
+    create-temporary-plot-pen ( word "Fart (skub på " current-skub " N) " genstart-number ) ;;kun hvis de ikke må ændre skubbekraften undervejs i forsøget! ;;kan gøres sådan
+
+    ;;workaround:
+    set-plot-pen-color plot-color
+    plotxy 0 0
   ]
 
 
@@ -1213,30 +1242,37 @@ to setup-plot ;;køres i setup ('Opsætning')
     ifelse vinter? [set currently-vinter? true] [set currently-vinter? false]
     ifelse currently-vinter? = true
       [
-        create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion)" )
+        create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion) " genstart-number )
     ]
       [
-      create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion)" )
+      create-temporary-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion) " genstart-number )
     ]
     set plot-color item color-counter base-colors ;;built-in NetLogo list ;;@change to my own custom list
     ifelse color-counter < (length my-colors) - 1 ;;-1 since 0 indicates the first item
       [set color-counter color-counter + 1]
       [set color-counter 0]
+
+    ; JB - Workaround for zeroing plots issue - plot the starting `plotxy 0 0` so we don't do it as part of `update-plot`
+    set-plot-pen-color plot-color
+    plotxy 0 0
+
   ]
 
 end
 
 to update-plot
-    ;;stop 'backtracking' of line to beginning (men i "Fri leg" skifter farven på legend og ny linje, da den ikke er fastsat - @fix det):
+
   if show-timer = 0 and current-opgave != "1. Flytning af genstande" and current-opgave != "6. Betydning af kløft" [ ;;@skift her, hvis kløft skal vise plot
-    plot-pen-up
-    plotxy 0 0
-    plot-pen-down
+
+    ; JB - Workaround for zeroing plots issue - do not `plotxy 0 0` multiple times before the simulation "starts"
+    ; plot-pen-up
+    ; plotxy 0 0
+    ; plot-pen-down
     ;;@tilføj evt.: hvis samme indstillinger, skal den tidligere plot-linje slettes?
   ]
 
   if current-opgave = "2. Betydning af masse" [
-    set-current-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg)" ) ;;pre-created in both/either Opsætning and/or Genstart
+    set-current-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg) " genstart-number ) ;;pre-created in both/either Opsætning and/or Genstart
 
   ;;set pen color depending on the chosen mass:
     let vælg-masse-string (word current-vælg-masse) ;from number to string
@@ -1254,7 +1290,11 @@ to update-plot
     ]
 
     set-plot-pen-color read-from-string plot-color ;;@make it random/visualising the different weights! a gradient!
-    plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+
+    ;;workaround:
+    if show-timer != 0 [
+      plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+    ]
 
   ]
 
@@ -1274,7 +1314,7 @@ to update-plot
 
 
   if current-opgave = "5. Betydning af skubbekraft" [
-    set-current-plot-pen ( word "Fart (skub på " current-skub " N)" )
+    set-current-plot-pen ( word "Fart (skub på " current-skub " N) " genstart-number )
 
   ;;pen color depends on the size of the skubbekraft:
     ifelse current-skub >= 100
@@ -1291,56 +1331,29 @@ to update-plot
     ]
 
     set-plot-pen-color read-from-string plot-color
-    plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+
+;;workaround:
+    if show-timer != 0 [
+      plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+    ]
   ]
 
 
   if current-opgave = "Fri leg" [
     ifelse currently-vinter? = true
-      [set-current-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion)" )]
-      [set-current-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion)" )]
+      [set-current-plot-pen ( word current-vælg-masse " kg, " current-skub " N (ingen friktion) " genstart-number )]
+      [set-current-plot-pen ( word current-vælg-masse " kg, " current-skub " N (med friktion) " genstart-number )]
 
     ;;set plot-color one-of base-colors ;;this is run in setup-plot
     set-plot-pen-color plot-color
 
-    plotxy show-timer (abs global-speed)
+    ; JB - Workaround for zeroing plots issue - do not `plotxy 0 0` multiple times before the simulation "starts"
+    if show-timer != 0 [
+      plotxy show-timer (abs global-speed)
+    ]
 
   ]
 end
-
-
-
-;;CODE EXAMPLE FOR DEBUGGING:
-
-;to setup-plot ;;run in setup
-;  set-current-plot "Output"
-;
-;  if task = "task 4" [
-;    create-temporary-plot-pen "Fart (med friktion)"
-;    create-temporary-plot-pen "Fart (ingen friktion)"
-;  ]
-;end
-;
-;to update-plot ;;run in go
-;  if task = "task 4" [
-;    ifelse season = "vinter" [
-;      set-current-plot-pen ( word "Fart (ingen friktion)" )
-;      set-plot-pen-color plot-color + 2
-;      plotxy show-timer (abs global-speed)
-;    ]
-;    [ ;;if summer:
-;      set-current-plot-pen ( word "Fart (med friktion)" )
-;      set-plot-pen-color plot-color - 2
-;      plotxy show-timer (abs global-speed)
-;    ]
-;  ]
-;end
-
-
-
-
-
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 225
@@ -1671,7 +1684,7 @@ vælg-masse
 vælg-masse
 1
 100
-37.0
+15.0
 1
 1
 kg
@@ -1771,7 +1784,7 @@ vælg-kraft
 vælg-kraft
 0
 1000
-240.0
+150.0
 10
 1
 N
