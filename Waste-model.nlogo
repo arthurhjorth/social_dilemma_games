@@ -12,6 +12,9 @@ globals [
   co2-list
   weekly-co2 ;;for calculate
 
+  future-per-year
+  now-per-year
+
 
   horizon-line ;;visuals
 ]
@@ -48,16 +51,23 @@ end
 
 to add-waste
   set waste-list fput (list waste-nr waste-type) waste-list
-  output-print (word waste-nr " " waste-type)
+  show-waste-list
 end
 
 
-to show-my-waste ;;so they can go back in the output to see their overview (@+ maybe add any easy way to make small changes to it???)
+to show-waste-list ;;so they can go back in the output to see their overview (@+ maybe add any easy way to make small changes to it???)
   clear-output
-  foreach waste-list [
-    [waste-pair] ->
-    output-print ( word (item 0 waste-pair) " " (item 1 waste-pair) )
+
+  ifelse length waste-list != 0 [
+    foreach waste-list [
+      [waste-pair] ->
+      output-print ( word (item 0 waste-pair) " " (item 1 waste-pair) )
+    ]
   ]
+  [ ;;if waste-list is still empty:
+    output-print "You haven't added anything to your weekly waste yet!"
+  ]
+
 
 
 end
@@ -76,7 +86,6 @@ to calculate ;;after they've added all their waste
       [waste-pair] ->
       output-print (word (item 0 waste-pair * 52) " " (item 1 waste-pair)  )
     ]
-
 
     output-print ""
     output-print "In 50 years, you'll have used:"
@@ -104,25 +113,32 @@ to calculate ;;after they've added all their waste
   foreach waste-list [
     [waste-pair] ->
 
-    let almost-clean-name remove "(" (item 1 waste-pair)
-    let clean-name remove ")" almost-clean-name ;;without parantheses
+    let clean-name (item 1 waste-pair)
+
+    ;;this doesn't seem to work in NetLogo Web (and not needed if I remove the () from the choosed drop-down:
+    ;;let almost-clean-name remove "(" (item 1 waste-pair)
+    ;;let clean-name remove ")" almost-clean-name ;;without parantheses
 
     let length-name length clean-name ;;(substring starts at 0, but doesn't include the last number - so this works)
     let waste-name substring clean-name 8 length-name ;;removes the 'plastic ' (8 characters) from the waste name (for more plot space ;-))
     set-current-plot-pen (word waste-name " (current)")
 
-    foreach (range 1 53) [
+    foreach (range 1 53) [ ;;the x axis of the plot now shows 0-52 weeks
       [nr-of-weeks] ->
-      plotxy nr-of-weeks (nr-of-weeks * (item 0 waste-pair))
+
+        plotxy nr-of-weeks (nr-of-weeks * (item 0 waste-pair))
     ]
+
+
   ]
 
-  ;;plot prognosis trajectories if they use ONE less every weekfor each waste type (amount):
+  ;;plot prognosis trajectories if they use ONE less every week for each waste type (amount):
     foreach waste-list [
     [waste-pair] ->
 
-    let almost-clean-name remove "(" (item 1 waste-pair)
-    let clean-name remove ")" almost-clean-name ;;without parantheses
+    let clean-name (item 1 waste-pair)
+    ;;let almost-clean-name remove "(" (item 1 waste-pair)
+    ;;let clean-name remove ")" almost-clean-name ;;without parantheses
 
     let length-name length clean-name ;;(substring starts at 0, but doesn't include the last number - so this works)
     let waste-name substring clean-name 8 length-name ;;removes the 'plastic ' (8 characters) from the waste name (for more plot space ;-))
@@ -133,10 +149,6 @@ to calculate ;;after they've added all their waste
       plotxy nr-of-weeks (nr-of-weeks * ( ( item 0 waste-pair) - 1))
     ]
   ]
-
-
-
-
 
 ;;CO2 POLLUTION
   if calculate-this = "CO2 pollution" [
@@ -158,13 +170,13 @@ to calculate ;;after they've added all their waste
     output-print "(right now this calculation is completely random!)"
 
     ;;prediction/if change: @change for CO2 levels
+    output-print ""
     output-print "But if you used just ONE less of each thing every week...:"
     output-print "You would save:"
     output-print "(*add data for how much CO2 that would save for"
     output-print " each waste type)"
 
     ]
-
 end
 
 
@@ -206,8 +218,8 @@ to groupedbarplot [plotname ydata pencols pennames barwidth step]
     ;; Select the current ydata list and compute x-values depending on number of groups (n), current group (i) and bardwith
     let y item i ydata
     let x n-values (length y) [? -> (i * barwidth) + (? * (((n + 1) * barwidth)))]
-    print y
-    print x
+    ;;print y
+    ;;print x
 
     ;; Initialize the plot (create a pen, set the color, set to bar mode and set plot-pen interval)
     set-current-plot plotname
@@ -239,22 +251,169 @@ end
 
 
 
+to barplot [plotname ydata pencols pennames barwidth step] ;;@not working yet!
+  ;;@tweak the groupedbarplot procedure to make a function for a pretty non-grouped barplot!
 
-;;REPORTERS
-to-report my-mercury
-  report 40
+  ;; Get n from ydata -> number of groups (colors)
+  let n length ydata
+  let i 0
+  print "here we go"
+  ;; Loop over ydata groups (colors)
+  while [i < n]
+  [
+    ;; Select the current ydata list and compute x-values depending on number of groups (n), current group (i) and bardwith
+    let y item i ydata
+    let x n-values 1 [? -> (i * barwidth) + (? * (((n + 1) * barwidth)))] ;;@changed (length y) to 1
+
+    ;; Initialize the plot (create a pen, set the color, set to bar mode and set plot-pen interval)
+    set-current-plot plotname
+    create-temporary-plot-pen item i pennames ;;(word i) ;;changed from 'word i' in the paranthesis@@@
+    set-plot-pen-color item i pencols
+    set-plot-pen-mode 1 ;;bar mode
+    set-plot-pen-interval step
+
+    ;; Loop over xy values from the two lists:
+
+      ;; Select current item from x and y and set x.max for current bar, depending on barwidth
+      let x.temp x
+    print "hmm"
+      let x.max x.temp + (barwidth * 0.97) ;;THIS IS THE PROBLEM!@
+    print "eeh"
+      let y.temp y
+
+      ;; Loop over x-> xmax and plot repeatedly with increasing x.temp to create a filled barplot
+      while [x.temp < x.max]
+      [
+        plotxy x.temp y.temp
+
+        set x.temp (x.temp + step)
+      print "maybe"
+      ] ;; End of x->xmax loop
+
+    set i (i + 1)
+    print "yay"
+  ] ;; End of loop over all groups
+  print "done! : -)"
 end
 
-to-report my-lead
-  report 50
+
+;;DYNAMIC FUTURE PLOT:
+
+to plot-the-future
+  ;;@right now loops over waste list, but should probably be able to choose just one item at a time
+  if length waste-list != 0 [
+
+    every 0.1 [
+
+      ;;1. THE LINE PLOT
+
+      set-current-plot "The future"
+
+      ;;plot the current trajectories for each waste type (amount):
+      foreach waste-list [
+        [waste-pair] ->
+        let clean-name (item 1 waste-pair)
+
+        let length-name length clean-name ;;(substring starts at 0, but doesn't include the last number - so this works)
+        let waste-name substring clean-name 8 length-name ;;removes the 'plastic ' (8 characters) from the waste name (for more plot space ;-))
+
+
+        ;;plot current use:
+        create-temporary-plot-pen  (word waste-name " (now)") ;;create a plot pen with that waste name
+        set-current-plot-pen (word waste-name " (now)")
+        set-plot-pen-color black
+        plot-pen-reset ;;clears anything it has drawn before
+
+        foreach (range 1 53) [ ;;the x axis of the plot now shows 0-52 weeks
+          [nr-of-weeks] ->
+
+          plotxy nr-of-weeks (nr-of-weeks * (item 0 waste-pair))
+        ]
+
+        set now-per-year 52 * (item 0 waste-pair)
+
+        ;;plot trajectory based on the slider (this should change in real time):
+        create-temporary-plot-pen  (word waste-name " (change)") ;;create a plot pen with that waste name
+        set-current-plot-pen (word waste-name " (change)")
+        set-plot-pen-color blue
+        plot-pen-reset ;;clears anything it has drawn before
+
+        let new-per-week ( (item 0 waste-pair) + change-per-week ) ;;new nr of items used per week (change-per-week is the interface slider)
+
+        foreach (range 1 53) [ ;;the x axis of the plot now shows 0-52 weeks
+          [nr-of-weeks] ->
+
+          ifelse new-per-week > 0 [
+            plotxy nr-of-weeks (nr-of-weeks * new-per-week)
+          ]
+          [ ;;if it gets to 0 (or less) per week with the change:
+            plotxy nr-of-weeks 0
+          ]
+        ] ;;end of plotting loop
+
+        set future-per-year 52 * new-per-week
+
+        ;;2. THE BAR PLOT
+
+        ;;try with the procedure:
+
+;        let plotname "Bar future"
+;        let your-country 210 let sustainable 100 ;;@random static numbers now
+;        let ydata (list now-per-year future-per-year 210 100)
+;        print ydata
+;        let pencols (list black blue grey green) ;;colors of bars
+;        let pennames (list "You now" "You with change" "Your country" "Sustainable")
+;        let barwidth 1
+;        let step 0.01
+;        barplot plotname ydata pencols pennames barwidth step  ;;call the plotting procedure
+
+
+    ;;try manually:
+
+        set-current-plot "Bar future"
+
+        ;;plot your country's average use per year:
+        create-temporary-plot-pen (word waste-name " (your country)")
+        set-current-plot-pen (word waste-name " (your country)")
+        set-plot-pen-mode 1 ;;bar mode
+        set-plot-pen-color red
+        set-plot-pen-interval 2
+        plot-pen-reset
+        plot 140
+
+
+        ;;plot current use:
+        create-temporary-plot-pen  (word waste-name " (now)") ;;create a plot pen with that waste name
+        set-current-plot-pen (word waste-name " (now)")
+        set-plot-pen-mode 1 ;;bar mode
+        set-plot-pen-color black
+        set-plot-pen-interval 2
+        plot-pen-reset
+        plot now-per-year
+
+        ;;plot future use:
+        create-temporary-plot-pen  (word waste-name " (change)") ;;create a plot pen with that waste name
+        set-current-plot-pen (word waste-name " (change)")
+        set-plot-pen-mode 1 ;;bar mode
+        set-plot-pen-color blue
+        set-plot-pen-interval 2
+        plot-pen-reset
+        plot future-per-year
+
+
+
+      ] ;;end of waste-list loop
+    ] ;;end of if length waste-list != 0
+
+
+
+
+
+
+  ] ;;end of every 0.x
+
+
 end
-
-
-
-
-
-
-
 
 
 
@@ -341,13 +500,13 @@ to visualize
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-1180
+1210
 10
-1483
-314
+1503
+304
 -1
 -1
-1.47
+1.42
 1
 10
 1
@@ -368,10 +527,10 @@ ticks
 30.0
 
 BUTTON
-50
-15
-113
-48
+210
+10
+295
+60
 NIL
 setup
 NIL
@@ -379,15 +538,15 @@ NIL
 T
 OBSERVER
 NIL
-S
+NIL
 NIL
 NIL
 1
 
 TEXTBOX
-595
+460
 10
-870
+735
 28
 What is YOUR impact on plastic pollution?
 15
@@ -395,36 +554,36 @@ What is YOUR impact on plastic pollution?
 1
 
 BUTTON
-1045
-155
-1170
-188
-VISUALIZE MY WASTE!
+1080
+115
+1202
+148
+VISUALIZE!
 visualize
 NIL
 1
 T
 OBSERVER
 NIL
-G
+NIL
 NIL
 NIL
 1
 
 CHOOSER
-1020
-110
-1170
-155
+1055
+70
+1205
+115
 visualize-this
 visualize-this
 "Bottles in a year" "Bottles in 50 years"
-0
+1
 
 INPUTBOX
-740
+605
 60
-895
+760
 120
 type-waste-type
 NIL
@@ -433,37 +592,37 @@ NIL
 String
 
 OUTPUT
-515
+380
 240
-965
+830
 490
 11
 
 INPUTBOX
-565
+430
 155
-620
+485
 215
 waste-nr
-3.0
+5.0
 1
 0
 Number
 
 CHOOSER
-580
+445
 70
-735
+600
 115
 choose-waste-type
 choose-waste-type
-"(type custom waste)" "plastic bottle(s)" "plastic bag(s)" "plastic package(s)" "plastic cutlery" "plastic straw(s)"
-1
+"(type custom waste)" "plastic bottles" "plastic bags" "plastic packages" "plastic cutlery" "plastic straws"
+2
 
 MONITOR
-625
+490
 165
-825
+690
 210
 NIL
 waste-type
@@ -472,9 +631,9 @@ waste-type
 11
 
 BUTTON
-830
+695
 165
-917
+782
 210
 Add waste
 add-waste
@@ -489,10 +648,10 @@ NIL
 1
 
 PLOT
-30
-105
-405
-255
+15
+110
+380
+230
 Plastic Pollution
 Ocean    Landfills      Recycled       Other         
 unit?
@@ -506,9 +665,9 @@ true
 PENS
 
 TEXTBOX
-1015
+975
 10
-1165
+1125
 45
 (visualization would not be done in NetLogo!)
 14
@@ -516,9 +675,9 @@ TEXTBOX
 1
 
 TEXTBOX
-60
+40
 85
-405
+315
 103
 Choose a country and compare pollution levels:
 13
@@ -526,11 +685,11 @@ Choose a country and compare pollution levels:
 1
 
 BUTTON
-170
-255
-275
-300
-Compare pollution!
+155
+235
+257
+276
+Compare!
 compare-pollution
 NIL
 1
@@ -543,19 +702,19 @@ NIL
 1
 
 CHOOSER
-30
-255
-168
-300
+15
+235
+153
+280
 country
 country
 "Denmark" "Djibouti"
 0
 
 TEXTBOX
-625
+490
 40
-850
+715
 66
 1. Choose or write a type of plastic:
 13
@@ -563,9 +722,9 @@ TEXTBOX
 1
 
 TEXTBOX
-550
+415
 135
-950
+815
 153
 2. Select the amount you use in ONE WEEK and press 'Add waste':
 13
@@ -573,9 +732,9 @@ TEXTBOX
 1
 
 TEXTBOX
-535
+400
 220
-960
+825
 238
 3. Keep going until you have an overview of your weekly plastic waste:
 13
@@ -583,9 +742,9 @@ TEXTBOX
 1
 
 TEXTBOX
-515
+380
 500
-690
+555
 531
 4. Choose from the list and press 'CALCULATE!':
 13
@@ -593,9 +752,9 @@ TEXTBOX
 1
 
 BUTTON
-820
+685
 495
-920
+825
 540
 CALCULATE!
 calculate
@@ -610,32 +769,32 @@ NIL
 1
 
 CHOOSER
-680
+560
 495
-818
+680
 540
 calculate-this
 calculate-this
-"amount" "CO2 pollution" "(other things)"
+"amount" "CO2 pollution" "(other things)" "(water? oil?" "(biodiversity?)"
 0
 
 TEXTBOX
+20
 285
-260
-435
-278
+170
+303
 (non-dynamic data right now)
 11
 0.0
 1
 
 BUTTON
-820
+685
 545
-920
+825
 578
 Show my waste list
-show-my-waste
+show-waste-list
 NIL
 1
 T
@@ -647,10 +806,10 @@ NIL
 1
 
 PLOT
-980
-400
-1340
-580
+840
+170
+1035
+290
 Prognosis
 Weeks
 Amount
@@ -668,10 +827,10 @@ PENS
 "bags (change)" 1.0 0 -13345367 true "" ""
 
 INPUTBOX
-1090
-50
-1170
-110
+1125
+10
+1205
+70
 bottles-in-week
 3.0
 1
@@ -679,34 +838,153 @@ bottles-in-week
 Number
 
 TEXTBOX
-985
-380
-1380
-400
+845
+135
+1050
+175
 5. See your impact over time (with and without making a change):
 13
 0.0
 1
 
 TEXTBOX
-145
-440
-295
-458
-(add more stuff here?)
+35
+350
+225
+560
+ideas for things to add:\n\n- age (students input it, the graphs and texts show them things like 'when you're 30, you'll have polluted this much!\n\n- a drop-down menu where students choose if they input waste per week, per month, per year, etc.
 13
 0.0
 1
 
+SLIDER
+1005
+375
+1245
+408
+change-per-week
+change-per-week
+-5
+5
+2.0
+1
+1
+NIL
+HORIZONTAL
+
 TEXTBOX
-1345
-505
-1455
+15
+15
+215
+80
+0. PRESS THE SETUP BUTTON TO START UP THE MODEL:
+14
+0.0
+1
+
+TEXTBOX
+430
 575
-(could also show CO2 or other data on the y-axis)
+580
+593
+(convert to kilos?)
 11
 0.0
 1
+
+TEXTBOX
+160
+530
+330
+605
+(make it easier to reduce plastic waste)\nat a later point than initial input\n- workflow
+11
+0.0
+1
+
+PLOT
+885
+410
+1245
+595
+The future
+Time
+Amount
+0.0
+52.0
+0.0
+10.0
+true
+true
+"" ""
+PENS
+
+BUTTON
+885
+375
+997
+408
+NIL
+plot-the-future
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+MONITOR
+1165
+520
+1240
+565
+With change:
+future-per-year
+17
+1
+11
+
+MONITOR
+1165
+475
+1240
+520
+Now:
+now-per-year
+17
+1
+11
+
+TEXTBOX
+935
+330
+1245
+365
+What if you changed your plastic use? Here's what one year would look like:
+14
+0.0
+1
+
+PLOT
+1250
+410
+1450
+595
+Bar future
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot count turtles"
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1092,7 +1370,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.1
+NetLogo 6.2.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
