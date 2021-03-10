@@ -14,6 +14,9 @@ globals [
 
   future-per-year
   now-per-year
+  ydata-2-plot
+  plot-item-count ;;item 0 waste-pair (for future plot)
+  max-y ;;@
 
 
   horizon-line ;;visuals
@@ -253,47 +256,53 @@ end
 
 to barplot [plotname ydata pencols pennames barwidth step] ;;@not working yet!
   ;;@tweak the groupedbarplot procedure to make a function for a pretty non-grouped barplot!
-
   ;; Get n from ydata -> number of groups (colors)
   let n length ydata
   let i 0
-  print "here we go"
+
+  set-current-plot plotname ;;@
+  clear-plot ;;@
+  ;;let new-per-week ( (item 0 waste-pair) + change-per-week ) ;;new-per-week is new nr of items used per week (change-per-week is the interface slider)
+  set max-y ((plot-item-count + 5) * 52) + 10 ;;right now +5 is the max change in the interface slider. +10 for some aesthetic space above the bar
+  set-plot-y-range 0 max-y  ;;@
+
   ;; Loop over ydata groups (colors)
   while [i < n]
   [
     ;; Select the current ydata list and compute x-values depending on number of groups (n), current group (i) and bardwith
     let y item i ydata
-    let x n-values 1 [? -> (i * barwidth) + (? * (((n + 1) * barwidth)))] ;;@changed (length y) to 1
+    let x n-values (length y) [? -> (i * barwidth) + (? * (((n + 1) * barwidth)))]
+    ;;print y
+    ;;print x
 
     ;; Initialize the plot (create a pen, set the color, set to bar mode and set plot-pen interval)
     set-current-plot plotname
     create-temporary-plot-pen item i pennames ;;(word i) ;;changed from 'word i' in the paranthesis@@@
-    set-plot-pen-color item i pencols
+    ;;set-plot-pen-color item i pencols
     set-plot-pen-mode 1 ;;bar mode
     set-plot-pen-interval step
 
     ;; Loop over xy values from the two lists:
-
+    let j 0
+    while [j < length x]
+    [
       ;; Select current item from x and y and set x.max for current bar, depending on barwidth
-      let x.temp x
-    print "hmm"
-      let x.max x.temp + (barwidth * 0.97) ;;THIS IS THE PROBLEM!@
-    print "eeh"
-      let y.temp y
+      let x.temp item j x
+      let x.max x.temp + (barwidth * 0.97)
+      let y.temp item j y
+
+      set-plot-pen-color item j pencols ;;@
 
       ;; Loop over x-> xmax and plot repeatedly with increasing x.temp to create a filled barplot
       while [x.temp < x.max]
       [
         plotxy x.temp y.temp
-
         set x.temp (x.temp + step)
-      print "maybe"
       ] ;; End of x->xmax loop
-
+      set j (j + 1)
+    ] ;; End of dataloop for current group (i)
     set i (i + 1)
-    print "yay"
   ] ;; End of loop over all groups
-  print "done! : -)"
 end
 
 
@@ -339,66 +348,72 @@ to plot-the-future
         plot-pen-reset ;;clears anything it has drawn before
 
         let new-per-week ( (item 0 waste-pair) + change-per-week ) ;;new nr of items used per week (change-per-week is the interface slider)
+        set plot-item-count item 0 waste-pair ;;for the barplot procedure
 
         foreach (range 1 53) [ ;;the x axis of the plot now shows 0-52 weeks
           [nr-of-weeks] ->
 
           ifelse new-per-week > 0 [
             plotxy nr-of-weeks (nr-of-weeks * new-per-week)
+            set future-per-year 52 * new-per-week
           ]
           [ ;;if it gets to 0 (or less) per week with the change:
             plotxy nr-of-weeks 0
+            set future-per-year 0
           ]
         ] ;;end of plotting loop
 
-        set future-per-year 52 * new-per-week
 
         ;;2. THE BAR PLOT
 
         ;;try with the procedure:
 
-;        let plotname "Bar future"
-;        let your-country 210 let sustainable 100 ;;@random static numbers now
-;        let ydata (list now-per-year future-per-year 210 100)
-;        print ydata
-;        let pencols (list black blue grey green) ;;colors of bars
-;        let pennames (list "You now" "You with change" "Your country" "Sustainable")
-;        let barwidth 1
-;        let step 0.01
-;        barplot plotname ydata pencols pennames barwidth step  ;;call the plotting procedure
+        let plotname "Bar future"
+        let your-country 210 let sustainable 100 ;;@random static numbers now
+
+
+        let y-nest [[]]
+        let ydata-2 (list now-per-year future-per-year 210 100)
+        set ydata-2-plot lput ydata-2 item 0 y-nest
+        let pencols (list black blue grey green) ;;colors of bars
+        let pennames (list "You now" "You with change" "Your country" "Sustainable")
+        let barwidth 1.2
+        let step 0.01
+
+        barplot plotname ydata-2-plot pencols pennames barwidth step  ;;call the plotting procedure
 
 
     ;;try manually:
 
-        set-current-plot "Bar future"
-
-        ;;plot your country's average use per year:
-        create-temporary-plot-pen (word waste-name " (your country)")
-        set-current-plot-pen (word waste-name " (your country)")
-        set-plot-pen-mode 1 ;;bar mode
-        set-plot-pen-color red
-        set-plot-pen-interval 2
-        plot-pen-reset
-        plot 140
-
-
-        ;;plot current use:
-        create-temporary-plot-pen  (word waste-name " (now)") ;;create a plot pen with that waste name
-        set-current-plot-pen (word waste-name " (now)")
-        set-plot-pen-mode 1 ;;bar mode
-        set-plot-pen-color black
-        set-plot-pen-interval 2
-        plot-pen-reset
-        plot now-per-year
-
-        ;;plot future use:
-        create-temporary-plot-pen  (word waste-name " (change)") ;;create a plot pen with that waste name
-        set-current-plot-pen (word waste-name " (change)")
-        set-plot-pen-mode 1 ;;bar mode
-        set-plot-pen-color blue
-        set-plot-pen-interval 2
-        plot-pen-reset
-        plot future-per-year
+;        set-current-plot "Bar future"
+;
+;        ;;plot your country's average use per year:
+;        create-temporary-plot-pen (word waste-name " (your country)")
+;        set-current-plot-pen (word waste-name " (your country)")
+;        set-plot-pen-mode 1 ;;bar mode
+;        set-plot-pen-color red
+;        set-plot-pen-interval 2
+;        plot-pen-reset
+;        plot 140
+;
+;
+;        ;;plot current use:
+;        create-temporary-plot-pen  (word waste-name " (now)") ;;create a plot pen with that waste name
+;        set-current-plot-pen (word waste-name " (now)")
+;        set-plot-pen-mode 1 ;;bar mode
+;        set-plot-pen-color black
+;        set-plot-pen-interval 2
+;        plot-pen-reset
+;        plot now-per-year
+;
+;        ;;plot future use:
+;        create-temporary-plot-pen  (word waste-name " (change)") ;;create a plot pen with that waste name
+;        set-current-plot-pen (word waste-name " (change)")
+;        set-plot-pen-mode 1 ;;bar mode
+;        set-plot-pen-color blue
+;        set-plot-pen-interval 2
+;        plot-pen-reset
+;        plot future-per-year
 
 
 
@@ -604,7 +619,7 @@ INPUTBOX
 485
 215
 waste-nr
-5.0
+2.0
 1
 0
 Number
@@ -808,8 +823,8 @@ NIL
 PLOT
 840
 170
-1035
-290
+1165
+315
 Prognosis
 Weeks
 Amount
@@ -858,15 +873,15 @@ ideas for things to add:\n\n- age (students input it, the graphs and texts show 
 1
 
 SLIDER
-1005
+985
 375
-1245
+1225
 408
 change-per-week
 change-per-week
 -5
 5
-2.0
+0.0
 1
 1
 NIL
@@ -903,9 +918,9 @@ TEXTBOX
 1
 
 PLOT
-885
+865
 410
-1245
+1225
 595
 The future
 Time
@@ -920,9 +935,9 @@ true
 PENS
 
 BUTTON
-885
+865
 375
-997
+977
 408
 NIL
 plot-the-future
@@ -937,9 +952,9 @@ NIL
 1
 
 MONITOR
-1165
+1145
 520
-1240
+1220
 565
 With change:
 future-per-year
@@ -948,9 +963,9 @@ future-per-year
 11
 
 MONITOR
-1165
+1145
 475
-1240
+1220
 520
 Now:
 now-per-year
@@ -959,9 +974,9 @@ now-per-year
 11
 
 TEXTBOX
-935
+915
 330
-1245
+1225
 365
 What if you changed your plastic use? Here's what one year would look like:
 14
@@ -969,18 +984,18 @@ What if you changed your plastic use? Here's what one year would look like:
 1
 
 PLOT
-1250
+1225
 410
-1450
+1505
 595
 Bar future
-NIL
-NIL
+Now       Change        Country    Sustainable  
+Amount
 0.0
 10.0
 0.0
 10.0
-true
+false
 false
 "" ""
 PENS
