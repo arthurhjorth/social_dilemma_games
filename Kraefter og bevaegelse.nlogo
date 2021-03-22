@@ -228,6 +228,7 @@ to do-mouse-stuff
     set mouse-divisor scaling-mouse / mouse-dist ;;/ scaling-mouse
 
     set mouse-acc (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
+    set mouse-acc vælg-kraft / 10 * (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
 
     if mouse-xcor > object-x [set mouse-acc (mouse-acc)] ;;if pushing left, subtract push-force instead of adding it (negative speed = left)
     if mouse-xcor < object-x [set mouse-acc (- mouse-acc)]
@@ -1533,7 +1534,7 @@ CHOOSER
 styring
 styring
 "mus" "tastatur"
-1
+0
 
 MONITOR
 1120
@@ -1784,7 +1785,7 @@ vælg-kraft
 vælg-kraft
 0
 1000
-150.0
+500.0
 10
 1
 N
@@ -2408,7 +2409,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.1.1
+NetLogo 6.2.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
