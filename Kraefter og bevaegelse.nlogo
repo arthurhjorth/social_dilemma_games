@@ -1057,7 +1057,8 @@ to make-object
       set shape "flyttekasse"
       set object-name objekt
       set color 37
-      set size 3
+      set size 3 ;
+     set label (word vælg-masse " kg")
       setxy (min-pxcor + 4) 0
       set heading 90
       set choose-mass 15
@@ -1112,6 +1113,8 @@ to make-object
 ;;overwrite choose-mass hvis de selv styrer massen:
   if current-opgave = "2. Betydning af masse" or current-opgave = "Fri leg"
      [set choose-mass vælg-masse set current-vælg-masse vælg-masse] ;;når de selv varierer massen med interface-slider
+
+
 
 end
 
@@ -1534,7 +1537,7 @@ CHOOSER
 styring
 styring
 "mus" "tastatur"
-0
+1
 
 MONITOR
 1120
@@ -1685,7 +1688,7 @@ vælg-masse
 vælg-masse
 1
 100
-15.0
+35.0
 1
 1
 kg
