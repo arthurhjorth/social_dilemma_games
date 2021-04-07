@@ -155,6 +155,9 @@ to go
     update-plot ;;updates the plot with the custom temporary plot pens
     tick
   ]
+  if [speed = 0] of one-of objects and (opgave = "4. Betydning af skubbekraft" or opgave = "2. Betydning af masse" or opgave = "3. Betydning af friktion") [stop]
+
+
 end
 
 to-report object-x
@@ -1617,7 +1620,7 @@ CHOOSER
 90
 opgave
 opgave
-"1. Flytning af genstande" "2. Betydning af masse" "3. Betydning af friktion" "(4. Masse og friktion)" "5. Betydning af skubbekraft" "6. Betydning af kløft" "Fri leg"
+"1. Flytning af genstande" "2. Betydning af masse" "3. Betydning af friktion" "4. Betydning af skubbekraft" "5. Betydning af kløft" "Fri leg"
 0
 
 MONITOR
@@ -1688,7 +1691,7 @@ vælg-masse
 vælg-masse
 1
 100
-35.0
+1.0
 1
 1
 kg
