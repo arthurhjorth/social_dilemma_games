@@ -1,4 +1,5 @@
 globals [
+  hastighed ;hvor hurtigt spillet kører
   action ;;last button pressed. left = 1, right = 2
   ;;object-x ;;the object's current position
   ;;object-y
@@ -25,6 +26,7 @@ globals [
   last-score ;;for coding purposes, keeping track of the previous score (to see if it's changed)
   season
   timer-running?
+  attempt-stopped? ;så plot + bane stopper automatisk, når objektets fart når 0
   vis-vektorer? ;;@gør til interface-kontakt
 
   timer-at-end ;;timer at time of win/deaths
@@ -72,7 +74,6 @@ globals [
   genstart-number
 
 ]
-
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
 breed [objects object]
 breed [explosions explosion]
@@ -80,6 +81,8 @@ breed [players player]
 breed [graphics graphic] ;;sparks
 breed [mgraphics mgraphic] ;;mouse-related graphics
 breed [vgraphics vgraphic] ;;vector force graphics
+breed [banners banner] ;the 'kg' label for the object
+directed-link-breed [arrows arrow] ;breed only so it's the layer in front of the house and object (hmm, not working)
 
 objects-own [
   object-name
@@ -105,19 +108,17 @@ vgraphics-own [vector-name]
 
 to setup
   clear-all
+  set win? false set lost? false set fratræk-friktion? false set attempt-stopped? false set timer-running? false
+  set hastighed 42 ;@IBH: var tidligere slider i interface - nu kan vi variere her, hvor hurtigt spillet kører!!!
 
   set save-list []
 
   ifelse vinter? [set currently-vinter? true] [set currently-vinter? false]
-  set current-opgave opgave
-  set current-object objekt ;;gem fra chooseren til global variabel, så det ikke ændres, hvis de ændrer det
+  set current-opgave Bane
+  set current-object Genstand ;;gem fra chooseren til global variabel, så det ikke ændres, hvis de ændrer det
   make-world ;;cliff and season also specified here
   make-object ;;sets up the chosen level that's chosen
 
-  ;;set object-x -26 ;;the object's starting position
-
-  set win? false set lost? false set fratræk-friktion? false
-  set timer-running? false
   set vis-vektorer? false ;;@gør til interface-kontakt
   set nr-of-pushes 0
   set distance-flyttet 0
@@ -128,10 +129,11 @@ to setup
   set g 9.82 ;;tyngdeaccelerationen på jorden. Enhed: m/s
 
   setup-plot ;;creates plot pens depending on the chosen opgave
-  vis-instruks ;output-print startbesked i outputtet i interface
+  ;vis-instruks ;output-print startbesked i outputtet i interface
 
   reset-ticks
 end
+
 
 to go
   every 3 / hastighed   [
@@ -140,13 +142,14 @@ to go
       ;;set object-x [xcor] of one-of objects
       ;;set object-y [ycor] of one-of objects] ;;there'll always only be one object at a time
 
-    if not lost? and not win? [do-mouse-stuff]
 
-    move-person
+    if not lost? and not win? and not attempt-stopped? [do-mouse-stuff]
+
+    if not attempt-stopped? [move-person]
     if not lost? [check-object] ;;to see if they've failed
     if lost? [fail-animation] ;;animation of object falling down
 
-    if not lost? and not win? [
+    if not lost? and not win? and not attempt-stopped? [
       accelerate-object
       check-win
       update-graphics
@@ -155,7 +158,18 @@ to go
     update-plot ;;updates the plot with the custom temporary plot pens
     tick
   ]
-  if [speed = 0] of one-of objects and (opgave = "4. Betydning af skubbekraft" or opgave = "2. Betydning af masse" or opgave = "3. Betydning af friktion") [stop]
+
+  ;in certain levels, stop if the speed has reached 0:
+  if timer-running? and [speed = 0] of one-of objects and (Bane = "Betydning af skubbekraft" or Bane = "Betydning af masse" or Bane = "Betydning af friktion") [
+    set timer-running? false
+    set timer-at-end precision timer 2
+    ask timer-patch [set plabel (precision timer-at-end 2)]
+
+    set attempt-stopped? true
+    ;stop ;stops the model (@is this too harsh a command? stop it manually instead?) so plots also stop when the object is still after a push
+    ;STOP PLOTTET UDEN AT STOPPE PÅ SPIL-KNAPPEN!
+
+  ]
 
 
 end
@@ -181,7 +195,7 @@ to do-mouse-stuff
 
   if update-mgraphics? [
 
-      if [distance one-of objects <= 1] of patch (mouse-xcor) (mouse-ycor) [ ;;if the mouse is (roughly) on the object
+      if [distance one-of objects <= 2] of patch (mouse-xcor) (mouse-ycor) [ ;;if the mouse is (roughly) on the object
         set mouse-pull-on? TRUE ;;this remains true until the mouse button is lifted (see next if-statement)
         ]
 
@@ -195,7 +209,7 @@ to do-mouse-stuff
     set timer-running? TRUE
 
     create-mgraphics 1 [
-      set size 1
+      set size 0 ;made invisible now, since the link has the arrow
       set color yellow
       set shape "circle"
       setxy (mouse-xcor) (object-y)
@@ -213,7 +227,7 @@ to do-mouse-stuff
     set lifetime 1
     set name "object-dot"
     let turtle-number item 0 [who] of mgraphics with [name = "mouse-dot"] ;;the nr of the turtle under the mouse
-    create-link-with turtle turtle-number [set thickness 0.5 set color yellow set mouse-dist link-length] ;;visual link showing distance
+    create-arrow-to turtle turtle-number [set thickness 0.5 set color yellow set mouse-dist link-length] ;;visual link showing distance
     ]
 
     ];;if mouse down end
@@ -231,7 +245,7 @@ to do-mouse-stuff
     set mouse-divisor scaling-mouse / mouse-dist ;;/ scaling-mouse
 
     set mouse-acc (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
-    set mouse-acc vælg-kraft / 10 * (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
+    set mouse-acc vælg-kraft / 5 * (- (mouse-dist)^ 2 ) / mouse-divisor ;;proportionel med kvadratet på afstanden ;;(og så lineært skaleret ned)
 
     if mouse-xcor > object-x [set mouse-acc (mouse-acc)] ;;if pushing left, subtract push-force instead of adding it (negative speed = left)
     if mouse-xcor < object-x [set mouse-acc (- mouse-acc)]
@@ -476,14 +490,14 @@ to check-win
 
     make-save-list ;;save all the values from this go
 
-    ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if won, freeze visual timer at end time
+    ask timer-patch [set plabel (precision timer-at-end 2)] ;;if won, freeze visual timer at end time
     set last-score score
     set score score + 1
    ;; ask objects [die]
     ask players [set shape "person-happy"]
     ask graphics [die] ask mgraphics [die] ;;to kill off any sparks and the elastic (if mouse control)
-    ask patch (max-pxcor - (max-pxcor / 2) - 3) (max-pycor - 6) [set plabel (word "Sejt! Du brugte " (timer-at-end) " sekunder og " nr-of-pushes " skub.") ]
-    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 9) [set plabel "Fortsæt det gode arbejde!"]
+    ask patch (max-pxcor - (max-pxcor / 2) - 3) (max-pycor - 4) [set plabel (word "Sejt! Du brugte " (timer-at-end) " sekunder og " nr-of-pushes " skub.") ]
+    ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 7) [set plabel "Fortsæt det gode arbejde!"]
 
     set timer-running? FALSE ;;so the timer can start over again with their next first push
     set global-speed 0
@@ -495,19 +509,19 @@ to update-graphics
   if score != last-score [ ask patch (max-pxcor - 1) (max-pycor - 1) [set plabel (word "Score:" score)] ] ;;update score counter
 
   if win? or lost? [
-     ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if won or lost, freeze visual timer at end time
+     ask timer-patch [set plabel (precision timer-at-end 2)] ;;if won or lost, freeze visual timer at end time
      set timer-running? FALSE
   ]
 
 
     if timer-running? and not win? and not lost? [
       if object-y = 0 and count objects > 0 [ ;;if the timer is running and the object hasn't fallen
-        ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer 1)] ;;show the timer ticking away
+        ask timer-patch [set plabel (precision timer 1)] ;;show the timer ticking away
       ]
       ]
 
     if not timer-running? and not win? and not lost? [
-    ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (0)] ;;if timer shouldn't be running, just show 0
+    ask timer-patch [set plabel (0)] ;;if timer shouldn't be running, just show 0
   ]
 
 
@@ -534,7 +548,7 @@ to update-graphics
         setxy (vektor-friktion) vectors-y ;;x-cor indicates the size of the force
         hide-turtle
         set vector-name "friktion2"
-        create-link-from myself [ ;;myself refers to the "mommy"/the first vgraphic
+        create-arrow-from myself [ ;;myself refers to the "mommy"/the first vgraphic
          set color red
          set thickness 0.3
          set shape "link2" ;;my custom link arrow
@@ -554,7 +568,7 @@ to update-graphics
             setxy (vektor-skubbekraft) vectors-y ;;negative x-cor indicates the size of the force
             hide-turtle
             set vector-name "skubbekraft2"
-            create-link-from myself [ ;;myself refers to the "mommy"/the first vgraphic
+            create-arrow-from myself [ ;;myself refers to the "mommy"/the first vgraphic
               set color 52
               set thickness 0.3
               set shape "link2" ;;my custom link arrow
@@ -665,7 +679,7 @@ to check-object ;;to see if they've lost by pushing it over the edge (if there i
 
     make-save-list ;;save all the values from this go
 
-    ;;ask patch (min-pxcor + 2) (max-pycor - 1) [set plabel (precision timer-at-end 2)] ;;if lost, freeze visual timer at end time
+    ;;ask timer-patch [set plabel (precision timer-at-end 2)] ;;if lost, freeze visual timer at end time
     set timer-running? FALSE
 
     ask players [set shape "person"]
@@ -687,7 +701,8 @@ to check-object ;;to see if they've lost by pushing it over the edge (if there i
 end
 
 to fail-animation ;;what happens when the object gets pushed over the edge
-  ifelse object-y > -18 [ ;;if object hasn't reached the ground yet
+  ask banners [die] ;@?
+  ifelse object-y > (min-pycor + 2) [ ;;if object hasn't reached the ground yet
    ask objects [
       set real-heading 160
 
@@ -724,8 +739,8 @@ to fail-animation ;;what happens when the object gets pushed over the edge
       ]
       ]
 
-    ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 6) [set plabel (word "Åh nej, objektet faldt ud over kanten!") ]
-    ask patch (max-pxcor - (max-pxcor / 2) - 7) (max-pycor - 9) [set plabel "Tryk på 'Genstart' for at prøve igen!"]
+    ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 4) [set plabel (word "Åh nej, objektet faldt ud over kanten!") ]
+    ask patch (max-pxcor - (max-pxcor / 2) - 7) (max-pycor - 7) [set plabel "Tryk på 'Genstart' for at prøve igen!"]
 
       ;;user-message "You failed! :-( Try again!"
      ;;genstart ;;starts the level over
@@ -741,7 +756,7 @@ to make-save-list
   ;;set save-list [] ;;@now overwritten after each go (if we've already sent previous lists to a server or something)? Or should all gos be saved?
   ;;set save-list lput (list "time" timer-at-end) save-list ;;nested list? (first = variable, second = value)
 
-  set save-list lput (list objekt choose-mass skub nr-of-pushes distance-flyttet gnidnings-kof timer-at-end) save-list
+  set save-list lput (list Genstand choose-mass skub nr-of-pushes distance-flyttet gnidnings-kof timer-at-end) save-list
     ;;objektet, objektets masse, kraft i hvert skub, antal skub, total distance, gnidningskoefficient, tid
 end
 
@@ -752,15 +767,15 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;
 
 to move-person
-  if current-opgave = "1. Flytning af genstande" or current-opgave = "2. Betydning af masse"  or current-opgave = "3. Betydning af friktion" [
+  if current-opgave = "Flytning af genstande" or current-opgave = "Betydning af masse"  or current-opgave = "Betydning af friktion" [
     set skub 150
   ] ;;@kan ændre fastsat værdi
 
-  if current-opgave = "5. Betydning af skubbekraft" and show-timer != "Spillet kører ikke endnu" [
+  if current-opgave = "Betydning af skubbekraft" and show-timer != "Spillet kører ikke endnu" [
    set skub current-skub ;;så de ikke kan ændre det efter start
   ]
 
-  if styring = "tastatur" and win? = FALSE [
+  if styring = "tastatur" and win? = FALSE and attempt-stopped? = false [
 
   if action != 0 [
     if action = 1 [
@@ -834,7 +849,7 @@ to make-world
 
   if season = "sommer" [
   ask patches [ ;;summer sky and grass
-    ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor sky] [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;summer
+    ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > (min-pycor + 1))  [set pcolor sky] [ set pcolor scale-color green ((random 500) + 5000) 0 9000 ] ;;summer
   ]
     if not kløft? [
       ask patches [
@@ -880,32 +895,32 @@ to apply-opgave ;;køres i 'make-world' i både Opsætning og Genstart
   ]
 
 ;;KLØFT
-  if current-opgave != "Fri leg" and current-opgave != "6. Betydning af kløft" [ ;;(tilføj levels med valgfri kløft her)
+  if current-opgave != "Fri leg" and current-opgave != "Betydning af kløft" [ ;;(tilføj levels med valgfri kløft her)
     set kløft? false ;;(ellers ingen kløft)
   ]
 
  ;;levels med fastsat sommer:
-  if current-opgave = "1. Flytning af genstande" or current-opgave = "2. Betydning af masse"  or current-opgave = "5. Betydning af skubbekraft" or current-opgave = "6. Betydning af kløft" [
+  if current-opgave = "Flytning af genstande" or current-opgave = "Betydning af masse"  or current-opgave = "Betydning af skubbekraft" or current-opgave = "Betydning af kløft" [
    set vinter? false
   ]
 
   ;;levels med fastsat skub:
-  if current-opgave = "1. Flytning af genstande" or current-opgave = "2. Betydning af masse"  or current-opgave = "3. Betydning af friktion" or current-opgave = "6. Betydning af kløft" [
+  if current-opgave = "Flytning af genstande" or current-opgave = "Betydning af masse"  or current-opgave = " Betydning af friktion" or current-opgave = "Betydning af kløft" [
     set skub 150 ;;@kan ændre fast værdi (også i move-person)
   ]
 
    ;;valgfrit skub:
-  if current-opgave = "5. Betydning af skubbekraft" or current-opgave = "Fri leg" [
+  if current-opgave = "Betydning af skubbekraft" or current-opgave = "Fri leg" [
     set skub vælg-kraft set current-skub skub
   ]
 
 
  ;;forced objects:
-  if current-opgave = "2. Betydning af masse" or current-opgave = "3. Betydning af friktion" or current-opgave = "5. Betydning af skubbekraft" [
-    set objekt "kasse"
+  if current-opgave = "Betydning af masse" or current-opgave = "Betydning af friktion" or current-opgave = "Betydning af skubbekraft" [
+    set Genstand "kasse"
   ]
 
-  set current-object objekt
+  set current-object Genstand
 
   ;;by not adding the free levels to these, they can then still choose cliff or winter themselves using the switch (and cliff is applied in make-world):
   ifelse vinter?
@@ -914,10 +929,10 @@ to apply-opgave ;;køres i 'make-world' i både Opsætning og Genstart
 end
 
 to vis-instruks ;;køres i setup
-  if current-opgave = "1. Flytning af genstande" [ ;;@...
+  if current-opgave = "Flytning af genstande" [ ;;@...
     output-print "FLYTNING AF GENSTANDE"
     output-print "Hej! Vil du hjælpe mig med at flytte ind i mit nye hus?"
-    output-print "    1. Vælg en genstand i 'objekt'-drop-down-menuen."
+    output-print "    1. Vælg en genstand i 'Genstand'-drop-down-menuen."
     output-print "    2. Tryk på 'Genstart'."
     output-print "    3. Tryk på 'Spil'."
     output-print "    4. Skub til genstanden med 'J' og 'L' tasterne på tastaturet."
@@ -927,7 +942,7 @@ to vis-instruks ;;køres i setup
 
   ]
 
-  if current-opgave = "2. Betydning af masse" [
+  if current-opgave = "Betydning af masse" [
     output-print "BETYDNING AF MASSE"
     output-print "Jeg kan variere, hvor tungt jeg pakker mine flyttekasser..."
     output-print "Hvordan påvirker massen kassens fart, bevægelseslængde og acceleration?"
@@ -940,7 +955,7 @@ to vis-instruks ;;køres i setup
     output-print "PS. Tryk på 'Opsætning', hvis du vil viske plottet rent"
   ]
 
-    if current-opgave = "3. Betydning af friktion" [
+    if current-opgave = "Betydning af friktion" [
     output-print "BETYDNING AF FRIKTION"
     output-print "Hvad nu, hvis jeg flyttede ind om vinteren i stedet...?"
     output-print "Hvilken betydning har underlagets friktion/gnidningsmodstand?"
@@ -954,7 +969,7 @@ to vis-instruks ;;køres i setup
     output-print "PS. Tryk på Opsætning, hvis du vil viske plottet rent"
   ]
 
-  if current-opgave = "5. Betydning af skubbekraft" [
+  if current-opgave = "Betydning af skubbekraft" [
     output-print "BETYDNING AF SKUBBEKRAFT"
     output-print "Hvad nu, hvis jeg varierer, hvor hårdt jeg skubber...?"
     output-print "Hvilken betydning har kraften i skubbet?"
@@ -974,12 +989,12 @@ to vis-instruks ;;køres i setup
     output-print "(ikke færdigt endnu)"
   ]
 
-  if current-opgave = "6. Betydning af kløft" [
+  if current-opgave = "Betydning af kløft" [
     output-print "BETYDNING AF KLØFT"
     output-print "Jeg har altid drømt om et hus med udsigt..."
     output-print "Men pas nu på, at mine ting ikke ryger ud over kanten!"
     output-print "    1. Brug 'kløft?'-kontakten til at vælge, om der skal være en kløft."
-    output-print "    2. Vælg en genstand i 'objekt'-drop-down-menuen."
+    output-print "    2. Vælg en genstand i 'Genstand'-drop-down-menuen."
     output-print "    3. Tryk på 'Genstart'."
     output-print "    4. Skub genstanden hen til huset."
     output-print "(uden kløft er det her magen til opgave 1)"
@@ -993,7 +1008,7 @@ to vis-instruks ;;køres i setup
     output-print "FRI LEG"
     output-print "Nu har du muligheden for at ændre på lige, hvad du vil!"
     output-print "    1. Indstil: Masse (vælg-masse), skubbekraft (vælg-kraft),"
-    output-print "    friktion (vinter?), landskab (kløft?), udseende (objekt)."
+    output-print "    friktion (vinter?), landskab (kløft?), udseende (Genstand)."
     output-print "    2. Tryk på 'Genstart', når du har valgt dine indstillinger. "
     output-print "    3. Skub til tingen!"
     output-print "- Udfordring: Min bil er godt nok tung... kan du få den hen til huset?"
@@ -1014,23 +1029,23 @@ to make-object
   set total-push-force 0
 
   ;;clear yay you won patches
-  ask patch (max-pxcor - (max-pxcor / 2) - 3) (max-pycor - 6) [set plabel ""]
-  ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 9) [set plabel ""]
+  ask patch (max-pxcor - (max-pxcor / 2) - 3) (max-pycor - 4) [set plabel ""]
+  ask patch (max-pxcor - (max-pxcor / 2) - 8) (max-pycor - 7) [set plabel ""]
 
   ;;clear oh no you lost patches
-  ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 6) [set plabel "" ]
-  ask patch (max-pxcor - (max-pxcor / 2) - 7) (max-pycor - 9) [set plabel ""]
+  ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 4) [set plabel "" ]
+  ask patch (max-pxcor - (max-pxcor / 2) - 7) (max-pycor - 7) [set plabel ""]
 
 
 ;;;;;;;;;;;;
 ;;OBJEKTER;;
 ;;;;;;;;;;;;
 
-  if objekt = "æble" [
+  if Genstand = "æble" [
     ;;set kløft? FALSE ;;ingen afgrund?
     create-objects 1 [
       set shape "apple-small"
-      set object-name objekt ;;turtle variable
+      set object-name Genstand ;;turtle variable
       set color red
       set size 3
       setxy (min-pxcor + 4) 0
@@ -1040,11 +1055,11 @@ to make-object
     ]
   ]
 
-  if objekt = "kat" [
+  if Genstand = "kat" [
     ;;set kløft? TRUE
     create-objects 1 [
       set shape "my-cat2"
-      set object-name objekt
+      set object-name Genstand
       set color 7
       set size 3
       setxy (min-pxcor + 4) 0
@@ -1054,26 +1069,26 @@ to make-object
     ]
   ]
 
-  if objekt = "kasse" [
+  if Genstand = "kasse" [
     ;;set kløft? TRUE
     create-objects 1 [
       set shape "flyttekasse"
-      set object-name objekt
+      set object-name Genstand
       set color 37
-      set size 3 ;
-     set label (word vælg-masse " kg")
+      set size 3
       setxy (min-pxcor + 4) 0
       set heading 90
       set choose-mass 15
+      ;set label (word choose-mass " kg")
       set plot-color brown
     ]
   ]
 
-  if objekt = "får" [
+  if Genstand = "får" [
     ;;set kløft? TRUE ;;nu med afgrund?
     create-objects 1 [
       set shape "sheep"
-      set object-name objekt
+      set object-name Genstand
       set color white
       set size 3
       setxy (min-pxcor + 4) 0
@@ -1083,11 +1098,11 @@ to make-object
     ]
   ]
 
-   if objekt = "køleskab" [
+   if Genstand = "køleskab" [
     ;;set kløft?
     create-objects 1 [
       set shape "fridge"
-      set object-name objekt
+      set object-name Genstand
       set color white
       set size 3
       setxy (min-pxcor + 4) 0
@@ -1097,11 +1112,11 @@ to make-object
     ]
   ]
 
-   if objekt = "bil" [
+   if Genstand = "bil" [
     ;;set kløft? TRUE
     create-objects 1 [
       set shape "push-car" ;;push-car is my modified non-floating shape (and has a rotatable push-car-rot shape for the fail animation)
-      set object-name objekt
+      set object-name Genstand
       set color yellow
       set size 3
       setxy (min-pxcor + 4) 0
@@ -1114,12 +1129,52 @@ to make-object
 
 
 ;;overwrite choose-mass hvis de selv styrer massen:
-  if current-opgave = "2. Betydning af masse" or current-opgave = "Fri leg"
-     [set choose-mass vælg-masse set current-vælg-masse vælg-masse] ;;når de selv varierer massen med interface-slider
+  if current-opgave = "Betydning af masse" or current-opgave = "Fri leg" [
+    set choose-mass vælg-masse
+    set current-vælg-masse vælg-masse
+  ] ;;når de selv varierer massen med interface-slider
 
 
+  ;FASTSÆT SKUB (er også i make-person...):
+  if current-opgave = "Flytning af genstande" or current-opgave = "Betydning af masse"  or current-opgave = "Betydning af friktion" [
+    set skub 150
+  ] ;;@kan ændre fastsat værdi
+
+  if current-opgave = "Betydning af skubbekraft" and show-timer != "Spillet kører ikke endnu" [
+   set skub current-skub ;;så de ikke kan ændre det efter start
+  ]
+
+  ;LABELS:
+  ask objects [ attach-banner (word choose-mass " kg") ] ;attach the label (a 'banner turtle') showing the weight
+
+  ask kraft-patch [ set plabel (word "Skubbekraft: " skub " N") ]
+
+  ifelse currently-vinter?
+    [ ask kraft-patch-baggrund [set pcolor 6] ]
+    [ ask kraft-patch-baggrund [set pcolor 53.5] ]
 
 end
+
+to attach-banner [x] ;turtle procedure, run by the object
+  ask banners [die]
+  hatch-banners 1 [
+    set size 0
+    set label x
+    create-arrow-from myself [
+      tie
+      hide-link
+    ]
+  ]
+  ask banners [reposition]
+end
+
+to reposition  ;banner procedure
+  move-to one-of in-link-neighbors
+  set heading 35 ;banner-angle
+  fd 3 ;banner-distance
+end
+
+
 
 to genstart
   ; JB - Track each `Genstart` for different plot names
@@ -1130,9 +1185,9 @@ to genstart
 
   ask vgraphics [die] ;;the vectors
 
-  set current-opgave opgave
-  set current-object objekt ;;gem fra chooseren til global variabel, så det ikke ændres, hvis de ændrer det
-  ifelse vinter? [set currently-vinter? true] [set currently-vinter? false]
+  set current-opgave Bane
+  set current-object Genstand ;;gem fra chooseren til global variabel, så det ikke ændres, hvis de ændrer det
+  ifelse vinter? and (current-opgave = "Betydning af friktion" or current-opgave = "Fri leg") [set currently-vinter? true] [set currently-vinter? false]
   ;;set current-vælg-masse vælg-masse
   ;;set current-skub vælg-kraft
 
@@ -1142,23 +1197,25 @@ to genstart
 
 ;;dynamic plot pens:
 
-  if current-opgave = "2. Betydning af masse" [ ;;kaldes i 'Genstart' OG 'setup' (til opgave med varierende masse)
+  if current-opgave = "Betydning af masse" [ ;;kaldes i 'Genstart' OG 'setup' (til opgave med varierende masse)
     create-temporary-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg) " genstart-number )
 
     ;;workaround:
-    plot-pen-up
+;    plot-pen-up
+    set-plot-pen-color white
     plotxy 0 0
-    plot-pen-down
+;    plot-pen-down
 
   ]
 
-  if current-opgave = "5. Betydning af skubbekraft" [ ;;kaldes i 'Genstart' OG setup (varierende skubbekraft)
+  if current-opgave = "Betydning af skubbekraft" [ ;;kaldes i 'Genstart' OG setup (varierende skubbekraft)
     create-temporary-plot-pen ( word "Fart (skub på " current-skub " N) " genstart-number ) ;;kun hvis de ikke må ændre skubbekraften undervejs i forsøget! ;;kan gøres sådan
 
     ;;workaround:
-    plot-pen-up
+;    plot-pen-up
+    set-plot-pen-color white
     plotxy 0 0
-    plot-pen-down
+;    plot-pen-down
   ]
 
    if current-opgave = "Fri leg" [ ;;mulighed for at de vælger alle objekter og begge underlag! ;;@og enhver skubbekraft! gør det dynamisk!
@@ -1173,13 +1230,15 @@ to genstart
       [set color-counter 0]
 
     ; JB - Workaround for zeroing plots issue - plot the starting `plotxy 0 0` so we don't do it as part of `update-plot`
-    set-plot-pen-color plot-color
-    plot-pen-up
+    set-plot-pen-color white
     plotxy 0 0
-    plot-pen-down
+    set-plot-pen-color plot-color
+;    plot-pen-up
+;    plotxy 0 0
+;    plot-pen-down
   ]
 
-  set win? FALSE set lost? FALSE
+  set win? FALSE set lost? FALSE set attempt-stopped? FALSE
   ask players [setxy (min-pxcor + 1) 0 set shape "person"]
   set push-force 0
   set net-force 0
@@ -1207,16 +1266,30 @@ to-report show-timer
 end
 
 to-report timer-interface
-  ifelse timer-running? [report show-timer] [report "Spillet kører ikke endnu"]
+  ifelse timer-running?
+    [report show-timer]
+    [ifelse attempt-stopped? [ report timer-at-end ] [report "Spillet kører ikke endnu"] ]
 end
 
+to-report timer-patch
+  report patch (min-pxcor + 3) (max-pycor - 1)
+end
+
+to-report kraft-patch
+  report patch 0 (min-pycor + 5)
+end
+
+to-report kraft-patch-baggrund
+  if skub >= 1000 [ report patches with [(pxcor > (min-pxcor + 16)) and (pxcor < (max-pxcor - 28)) and (pycor < (min-pycor + 7)) and (pycor > (min-pycor + 3))] ]
+  if skub < 1000 [ report patches with [(pxcor > (min-pxcor + 17)) and (pxcor < (max-pxcor - 28)) and (pycor < (min-pycor + 7)) and (pycor > (min-pycor + 3))] ]
+end
 
 ;;PLOTS
 to setup-plot ;;køres i setup ('Opsætning')
   set-current-plot "Output"
 
 
-  if current-opgave = "2. Betydning af masse" [ ;;den her kaldes også i 'Genstart'
+  if current-opgave = "Betydning af masse" [ ;;den her kaldes også i 'Genstart'
     create-temporary-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg) " genstart-number )
 
     ;;workaroud:
@@ -1224,16 +1297,21 @@ to setup-plot ;;køres i setup ('Opsætning')
 
   ]
 
-  if current-opgave = "3. Betydning af friktion" [
+  if current-opgave = "Betydning af friktion" [
     create-temporary-plot-pen "Fart (med friktion)"
     create-temporary-plot-pen "Fart (ingen friktion)"
+
+    ;workaround (to avoid weird lines in NL web):
+    ifelse currently-vinter? [set-current-plot-pen "Fart (ingen friktion)"] [set-current-plot-pen "Fart (med friktion)"]
+    set-plot-pen-color white
+    plotxy 0 0
   ]
 
-;  if current-opgave = "4. Masse og friktion" [
+;  if current-opgave = "Masse og friktion" [
 ;    ;
 ;  ]
 
-  if current-opgave = "5. Betydning af skubbekraft" [ ;;den her kaldes også i 'Genstart'
+  if current-opgave = "Betydning af skubbekraft" [ ;;den her kaldes også i 'Genstart'
     create-temporary-plot-pen ( word "Fart (skub på " current-skub " N) " genstart-number ) ;;kun hvis de ikke må ændre skubbekraften undervejs i forsøget! ;;kan gøres sådan
 
     ;;workaround:
@@ -1269,7 +1347,7 @@ end
 
 to update-plot
 
-  if show-timer = 0 and current-opgave != "1. Flytning af genstande" and current-opgave != "6. Betydning af kløft" [ ;;@skift her, hvis kløft skal vise plot
+  if show-timer = 0 and current-opgave != "Flytning af genstande" and current-opgave != "Betydning af kløft" [ ;;@skift her, hvis kløft skal vise plot
 
     ; JB - Workaround for zeroing plots issue - do not `plotxy 0 0` multiple times before the simulation "starts"
     ; plot-pen-up
@@ -1278,7 +1356,7 @@ to update-plot
     ;;@tilføj evt.: hvis samme indstillinger, skal den tidligere plot-linje slettes?
   ]
 
-  if current-opgave = "2. Betydning af masse" [
+  if current-opgave = "Betydning af masse" [
     set-current-plot-pen ( word "Fart (kasse, " current-vælg-masse " kg) " genstart-number ) ;;pre-created in both/either Opsætning and/or Genstart
 
   ;;set pen color depending on the chosen mass:
@@ -1290,6 +1368,7 @@ to update-plot
 
         if current-vælg-masse > 99 [ ;;special case hvis den er præcis 100
           set plot-color "115"
+          ;(lige nu ikke special-lavede farver til over 100 kg...)
         ]
     ]
       [ ;;if mass < 10:
@@ -1306,21 +1385,21 @@ to update-plot
   ]
 
 
-  if current-opgave = "3. Betydning af friktion" [
-    ifelse season = "vinter" [
+  if current-opgave = "Betydning af friktion" [
+    ifelse currently-vinter? [
       set-current-plot-pen ( word "Fart (ingen friktion)" )
       set-plot-pen-color plot-color + 2 ;;@can tweak plot colors to make more readable
-      plotxy show-timer (abs global-speed)
+      if show-timer != 0 [ plotxy show-timer (abs global-speed) ]
     ]
     [ ;;if summer:
       set-current-plot-pen ( word "Fart (med friktion)" )
       set-plot-pen-color plot-color - 2 ;;@can tweak plot colors to make more readable
-      plotxy show-timer (abs global-speed)
+      if show-timer != 0 [ plotxy show-timer (abs global-speed) ]
     ]
   ]
 
 
-  if current-opgave = "5. Betydning af skubbekraft" [
+  if current-opgave = "Betydning af skubbekraft" [
     set-current-plot-pen ( word "Fart (skub på " current-skub " N) " genstart-number )
 
   ;;pen color depends on the size of the skubbekraft:
@@ -1363,13 +1442,13 @@ to update-plot
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-225
+250
 10
-965
-511
+948
+324
 -1
 -1
-12.0
+11.3115
 1
 16
 1
@@ -1381,8 +1460,8 @@ GRAPHICS-WINDOW
 1
 -30
 30
--20
-20
+-13
+13
 0
 0
 1
@@ -1390,10 +1469,10 @@ ticks
 30.0
 
 BUTTON
-10
-185
-80
-218
+115
+65
+205
+110
 Opsætning
 setup
 NIL
@@ -1407,11 +1486,11 @@ NIL
 1
 
 BUTTON
-85
-185
-148
-218
-Spil
+55
+240
+155
+295
+Start/stop
 go
 T
 1
@@ -1424,12 +1503,12 @@ NIL
 1
 
 BUTTON
-225
-510
-290
-543
+15
+305
+100
+338
 VENSTRE
-set action 1
+if not attempt-stopped? and ticks > 0 [ set action 1 ]
 NIL
 1
 T
@@ -1441,12 +1520,12 @@ NIL
 1
 
 BUTTON
-290
-510
-355
-543
+110
+305
+195
+338
 HØJRE
-set action 2
+if not attempt-stopped? and ticks > 0 [ set action 2 ]
 NIL
 1
 T
@@ -1458,20 +1537,20 @@ NIL
 1
 
 CHOOSER
+10
+65
+105
 110
-95
-205
-140
-objekt
-objekt
+Genstand
+Genstand
 "æble" "kat" "kasse" "får" "køleskab" "bil"
-2
+1
 
 BUTTON
-155
-185
-215
-220
+1055
+465
+1170
+530
 Genstart
 genstart
 NIL
@@ -1484,26 +1563,11 @@ NIL
 NIL
 1
 
-SLIDER
-405
-510
-577
-543
-hastighed
-hastighed
-1
-100
-42.0
-1
-1
-%
-HORIZONTAL
-
 MONITOR
-710
-510
-840
-555
+45
+460
+180
+505
 Tid brugt
 timer-interface
 17
@@ -1511,10 +1575,10 @@ timer-interface
 11
 
 MONITOR
-645
-510
-710
-555
+75
+405
+150
+450
 Antal skub
 nr-of-pushes
 17
@@ -1522,10 +1586,10 @@ nr-of-pushes
 11
 
 SWITCH
-20
-145
-110
-178
+1065
+320
+1155
+353
 kløft?
 kløft?
 1
@@ -1533,69 +1597,48 @@ kløft?
 -1000
 
 CHOOSER
-20
-95
-112
-140
+1065
+380
+1157
+425
 styring
 styring
 "mus" "tastatur"
 1
 
 MONITOR
-1120
-435
-1205
-480
+535
+570
+620
+615
 Meter fra start
 object-x + 26
 2
 1
 11
 
-TEXTBOX
-450
-545
-535
-563
-Spillets hastighed
-11
-0.0
-1
-
-MONITOR
-1430
-435
-1500
-480
-Friktion
-precision friktion 2
-17
-1
-11
-
 PLOT
-970
-195
-1505
-435
+250
+327
+935
+567
 Output
-Tid
-Fart
+Tid (s)
+Fart (m/s)
 0.0
 1.0
 0.0
 1.0
 true
 true
-"" "if opgave = \"Startspil\" [clear-plot auto-plot-off]"
+"" "if bane = \"Startspil\" [clear-plot auto-plot-off]"
 PENS
 
 SWITCH
-115
-145
-205
-178
+1065
+130
+1155
+163
 vinter?
 vinter?
 1
@@ -1603,10 +1646,10 @@ vinter?
 -1000
 
 MONITOR
-970
-435
-1047
-480
+375
+570
+452
+615
 Fart
 precision (abs v) 2
 17
@@ -1614,168 +1657,88 @@ precision (abs v) 2
 11
 
 CHOOSER
-20
-45
+10
+15
 205
-90
-opgave
-opgave
-"1. Flytning af genstande" "2. Betydning af masse" "3. Betydning af friktion" "4. Betydning af skubbekraft" "5. Betydning af kløft" "Fri leg"
+60
+Bane
+Bane
+"Flytning af genstande" "Betydning af masse" "Betydning af friktion" "Betydning af skubbekraft" "Betydning af kløft" "Fri leg"
 0
 
 MONITOR
-1045
-435
-1122
-480
+455
+570
+532
+615
 Topfart
 precision (abs [top-speed] of one-of objects) 2
 17
 1
 11
 
-OUTPUT
-970
-30
-1505
-190
-11
-
-TEXTBOX
-20
-10
-200
-50
-1. Vælg opgave og tryk på 'Opsætning'.
-13
-0.0
-1
-
 MONITOR
-125
-225
-190
-270
+115
+140
+205
+185
 Masse (kg)
 choose-mass
 17
 1
 11
 
-TEXTBOX
-975
-10
-1205
-30
-2. Læs instrukser herunder
-13
-0.0
-1
-
-TEXTBOX
-770
-605
-920
-623
-NIL
-11
-0.0
-1
-
 SLIDER
-5
-335
-215
-368
+975
+35
+1230
+68
 vælg-masse
 vælg-masse
 1
-100
-1.0
+1000
+15.0
 1
 1
 kg
 HORIZONTAL
 
 TEXTBOX
-30
-310
-205
-328
-Kun til opgave 2 (og fri leg):
-12
+990
+15
+1225
+33
+Kun til 'Betydning af masse' og 'Fri leg':
+13
 0.0
 1
 
 TEXTBOX
-35
-370
-200
-388
+1030
+75
+1195
+93
 Vælg masse og tryk på 'Genstart'.
 11
 0.0
 1
 
 MONITOR
-840
-510
-965
-555
-Samlet arbejde udført
-arbejde-monitor
-17
-1
-11
-
-MONITOR
-1350
-435
-1430
-480
-Kinetisk energi
-precision kinetisk-energi 2
-17
-1
-11
-
-MONITOR
-1205
-435
-1300
-480
+625
+570
+720
+615
 Top-acceleration
 precision ([top-acc] of one-of objects) 2
 17
 1
 11
 
-SWITCH
-1065
-530
-1215
-563
-auto-indstil-opgaver?
-auto-indstil-opgaver?
-1
-1
--1000
-
-TEXTBOX
-1220
-535
-1395
-576
-(funktionsløs lige nu - men kan være løsning på differentiering?)
-11
-0.0
-1
-
 MONITOR
-35
-225
-125
-270
+10
+140
+105
+185
 Skubbekraft (N)
 skub
 17
@@ -1783,35 +1746,35 @@ skub
 11
 
 SLIDER
-0
-440
-210
-473
+980
+220
+1235
+253
 vælg-kraft
 vælg-kraft
 0
 1000
-500.0
+150.0
 10
 1
 N
 HORIZONTAL
 
 TEXTBOX
-25
-415
-210
-433
-Kun til opgave 5 (og fri leg):
-12
+985
+200
+1240
+218
+Kun til 'Betydning af skubbekraft' og 'Fri leg':
+13
 0.0
 1
 
 TEXTBOX
-35
-475
-195
-493
+1040
+260
+1200
+278
 Vælg kraft og tryk på 'Genstart'.
 11
 0.0
