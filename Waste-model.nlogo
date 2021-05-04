@@ -637,7 +637,7 @@ INPUTBOX
 80
 270
 waste-nr
-3.0
+7.0
 1
 0
 Number
@@ -650,7 +650,7 @@ CHOOSER
 choose-waste-type
 choose-waste-type
 "plastic bottles" "plastic bags" "plastic packages" "plastic cutlery" "plastic straws"
-0
+1
 
 MONITOR
 85
@@ -732,7 +732,7 @@ CHOOSER
 country
 country
 "Denmark" "Djibouti"
-1
+0
 
 TEXTBOX
 10
@@ -799,7 +799,7 @@ CHOOSER
 calculate-this
 calculate-this
 "amount" "CO2 pollution" "kilos" "(other things)" "(water? oil?" "(biodiversity?)"
-0
+1
 
 TEXTBOX
 1150
@@ -848,7 +848,7 @@ change-per-week
 change-per-week
 -5
 5
-0.0
+-1.0
 1
 1
 NIL
@@ -986,6 +986,56 @@ TEXTBOX
 600
 <--- You can always click this button to see your weekly plastic waste, and change or edit it above
 13
+0.0
+1
+
+TEXTBOX
+255
+150
+405
+168
+OUNCE OR GRAM SELECTOR
+11
+0.0
+1
+
+TEXTBOX
+375
+110
+525
+136
+think hacky: how to change text (numbers)
+11
+0.0
+1
+
+TEXTBOX
+920
+185
+1070
+211
+maybe think non-linear reduction strategies
+11
+0.0
+1
+
+TEXTBOX
+235
+125
+385
+151
+select S, M or L (or input exact weight)
+11
+0.0
+1
+
+TEXTBOX
+855
+95
+1005
+113
+focus on water and CO2
+11
 0.0
 1
 
