@@ -791,7 +791,7 @@ INPUTBOX
 100
 205
 waste-nr
-3.0
+4.0
 1
 0
 Number
@@ -887,14 +887,14 @@ CHOOSER
 100
 calculate-this
 calculate-this
-"weight" "amount" "CO2 pollution" "(water?)"
+"weight" "amount" "CO2 pollution" "(water?)" "(what ends up in ocean?)"
 0
 
 BUTTON
 5
 568
 145
-599
+601
 Show weekly waste
 show-waste-list
 NIL
@@ -916,7 +916,7 @@ change-per-week
 change-per-week
 -500
 0
-0.0
+-150.0
 10
 1
 NIL
@@ -1020,7 +1020,7 @@ MONITOR
 475
 270
 1165
-326
+327
 NIL
 new-per-week-str
 17
@@ -1043,7 +1043,7 @@ INPUTBOX
 135
 290
 input-weight
-13.0
+34.0
 1
 0
 Number
@@ -1114,9 +1114,9 @@ SLIDER
 263
 percent-less-each-week
 percent-less-each-week
--50
+-10
 0
-0.0
+-2.0
 .5
 1
 %
@@ -1130,6 +1130,91 @@ TEXTBOX
 Prognosis:\n- linear\n- percentage\n\nwhat else could be interesting?
 14
 13.0
+1
+
+TEXTBOX
+325
+175
+475
+193
+add all in one chooser
+11
+0.0
+1
+
+TEXTBOX
+1260
+530
+1410
+556
+maybe visualize plastic weight saved somehow? (on plot?)
+11
+0.0
+1
+
+SLIDER
+975
+120
+1147
+153
+medium-reduction
+medium-reduction
+-10
+0
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+TEXTBOX
+1030
+85
+1180
+103
+add slider for each plastic size
+11
+0.0
+1
+
+TEXTBOX
+1345
+350
+1495
+406
+think: savings calculator/plots - start saving NOW vs later\nintegrate into bar plot (now, change, change in x years...)
+11
+0.0
+1
+
+TEXTBOX
+615
+570
+765
+611
+dynamic x-axis, choose what to see: month/year/10/50 years ...
+11
+0.0
+1
+
+TEXTBOX
+785
+570
+935
+596
+add: what is the weekly use at the end of this time scale?
+11
+0.0
+1
+
+TEXTBOX
+1050
+25
+1200
+51
+check whether we can open pics in pop-up window!
+11
+0.0
 1
 
 @#$#@#$#@

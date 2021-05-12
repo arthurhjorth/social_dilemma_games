@@ -73,6 +73,8 @@ globals [
   ; JB - Track each `Genstart` to give a unique plot name
   genstart-number
 
+  ticks-at-first-push ;for plotting in-game tick time starting from 0 when they start the push
+
 ]
 breed [houses house] ;;needs to be a breed only so it can be in the background layer
 breed [objects object]
@@ -205,7 +207,7 @@ to do-mouse-stuff
 
 
   if mouse-down? and mouse-pull-on? [ ;;if the mouse is pressed down while on the object, start the elastic!
-    if not timer-running? [reset-timer] ;;if it's the very first push, start the timer
+    if not timer-running? [reset-timer set ticks-at-first-push ticks] ;;if it's the very first push, start the timer + record when the first push started (for plotting)
     set timer-running? TRUE
 
     create-mgraphics 1 [
@@ -277,10 +279,10 @@ to accelerate-object
        ;;MEN PER HVAD?! SEKUND? SKAL PASSE MED TICK-I-SEKUNDER! OG MED FRIKTIONEN!
     ;;SCALE PUSH-FORCE?!
     ;;@CHECK THAT PUSH-FORCE (SKUB) IS IN NEWTON - should it be 'translated' from the interface input number?! depending on tick-i-sekunder?
+    ;set push-force (push-force * tick-i-sekunder) ;@ganget på længere nede?
 
 
-
-;;BEREGN NET-KRAFTEN (TRÆK FRIKTION FRA (/LÆG TIL)!
+;;BEREGN NET-KRAFTEN (TRÆK FRIKTION FRA (/LÆG TIL)! ;@HER
     ifelse abs push-force > friktion [ ;;hvis skubbekraften overstiger friktionskraften (@men hvis allerede i bevægelse, er det ikke nødvendigt)
       if push-force > 0 [
         set net-force (push-force - friktion) ;;if push towards right, friction towards left
@@ -739,7 +741,7 @@ to fail-animation ;;what happens when the object gets pushed over the edge
       ]
       ]
 
-    ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 4) [set plabel (word "Åh nej, objektet faldt ud over kanten!") ]
+    ask patch (max-pxcor - (max-pxcor / 2) - 6) (max-pycor - 4) [set plabel (word "Åh nej, genstanden faldt ud over kanten!") ]
     ask patch (max-pxcor - (max-pxcor / 2) - 7) (max-pycor - 7) [set plabel "Tryk på 'Genstart' for at prøve igen!"]
 
       ;;user-message "You failed! :-( Try again!"
@@ -778,6 +780,7 @@ to move-person
   if styring = "tastatur" and win? = FALSE and attempt-stopped? = false [
 
   if action != 0 [
+    set ticks-at-first-push ticks ;@
     if action = 1 [
       move-left
     ]
@@ -860,7 +863,7 @@ to make-world
 
   if season = "vinter" [
     ask patches [ ;;winter sky and snow
-    ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > -19)  [set pcolor 94] [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ]
+    ifelse pycor > -2 or (pxcor > (max-pxcor - 10) and pycor > (min-pycor + 1))  [set pcolor 94] [ set pcolor scale-color white ((random 500) + 8000) 0 9000 ]
     if pycor < -1 and pycor > -3 and pxcor < (max-pxcor - 9) [set pcolor scale-color 88 ((random 500) + 7000) 0 9000] ;;and ice
   ]
     if not kløft? [
@@ -1379,7 +1382,10 @@ to update-plot
 
     ;;workaround:
     if show-timer != 0 [
-      plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+      ;plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+      plotxy (ticks-since-first-push * tick-i-sekunder) (abs global-speed) ;@HER
+      print (word "x: " (ticks-since-first-push * tick-i-sekunder) ", y: " (abs global-speed))
+      ;@giraf
     ]
 
   ]
@@ -1389,12 +1395,12 @@ to update-plot
     ifelse currently-vinter? [
       set-current-plot-pen ( word "Fart (ingen friktion)" )
       set-plot-pen-color plot-color + 2 ;;@can tweak plot colors to make more readable
-      if show-timer != 0 [ plotxy show-timer (abs global-speed) ]
+      if show-timer != 0 [ plotxy (ticks-since-first-push * tick-i-sekunder) (abs global-speed) ] ;@plotxy show-timer (abs global-speed) ]
     ]
     [ ;;if summer:
       set-current-plot-pen ( word "Fart (med friktion)" )
       set-plot-pen-color plot-color - 2 ;;@can tweak plot colors to make more readable
-      if show-timer != 0 [ plotxy show-timer (abs global-speed) ]
+      if show-timer != 0 [ plotxy (ticks-since-first-push * tick-i-sekunder) (abs global-speed) ] ;@plotxy show-timer (abs global-speed) ]
     ]
   ]
 
@@ -1420,7 +1426,8 @@ to update-plot
 
 ;;workaround:
     if show-timer != 0 [
-      plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+      ;plotxy show-timer (abs global-speed) ;;real time on the x-axis (starting from first push), speed on the y axis
+      plotxy (ticks-since-first-push * tick-i-sekunder) (abs global-speed) ;@
     ]
   ]
 
@@ -1435,10 +1442,15 @@ to update-plot
 
     ; JB - Workaround for zeroing plots issue - do not `plotxy 0 0` multiple times before the simulation "starts"
     if show-timer != 0 [
-      plotxy show-timer (abs global-speed)
+      ;plotxy show-timer (abs global-speed)
+      plotxy (ticks-since-first-push * tick-i-sekunder) (abs global-speed) ;@
     ]
 
   ]
+end
+
+to-report ticks-since-first-push
+  report ticks - ticks-at-first-push
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -1544,7 +1556,7 @@ CHOOSER
 Genstand
 Genstand
 "æble" "kat" "kasse" "får" "køleskab" "bil"
-1
+2
 
 BUTTON
 1055
@@ -1664,7 +1676,7 @@ CHOOSER
 Bane
 Bane
 "Flytning af genstande" "Betydning af masse" "Betydning af friktion" "Betydning af skubbekraft" "Betydning af kløft" "Fri leg"
-0
+1
 
 MONITOR
 455
@@ -1697,7 +1709,7 @@ vælg-masse
 vælg-masse
 1
 1000
-15.0
+5.0
 1
 1
 kg
@@ -1706,7 +1718,7 @@ HORIZONTAL
 TEXTBOX
 990
 15
-1225
+1260
 33
 Kun til 'Betydning af masse' og 'Fri leg':
 13
@@ -1716,8 +1728,8 @@ Kun til 'Betydning af masse' og 'Fri leg':
 TEXTBOX
 1030
 75
-1195
-93
+1220
+110
 Vælg masse og tryk på 'Genstart'.
 11
 0.0
@@ -1763,7 +1775,7 @@ HORIZONTAL
 TEXTBOX
 985
 200
-1240
+1290
 218
 Kun til 'Betydning af skubbekraft' og 'Fri leg':
 13
@@ -1773,12 +1785,23 @@ Kun til 'Betydning af skubbekraft' og 'Fri leg':
 TEXTBOX
 1040
 260
-1200
-278
+1240
+300
 Vælg kraft og tryk på 'Genstart'.
 11
 0.0
 1
+
+MONITOR
+1360
+165
+1467
+210
+NIL
+ticks-at-first-push
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
