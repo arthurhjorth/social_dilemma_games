@@ -1,8 +1,10 @@
 ;;;;;;;;;;;;;;;;;;;
 ;;;;WASTE MODEL;;;;
 ;;;;;;;;;;;;;;;;;;;
-
+extensions [send-to]
 globals [
+  new-per-week-str
+
   log-now?
   log-data
 
@@ -37,6 +39,7 @@ patches-own [display-here?]
 to setup
   clear-all
   set log-now? false
+  set new-per-week-str "Press 'Show Effect' to see the effects of your saving"
   if names = "" or names = " " or names = "  " or names = "   " [
    user-message "Remember to fill in your names :)"
    stop
@@ -418,17 +421,17 @@ to plot-the-future
           ]
         ] ;;end of plotting loop
 
-        ;BAR PLOT (linear reduction)
-        let plotname "Bar future"
-        let y-nest [[]]
-        let ydata-2 (list now-per-year future-per-year 14000 9500)
-        set ydata-2-plot lput ydata-2 item 0 y-nest
-        let pencols (list black blue grey green) ;;colors of bars
-        let pennames (list "You now" "You with change" "Your country" "Sustainable")
-        let barwidth 1.2
-        let step 0.01
-
-        barplot plotname ydata-2-plot pencols pennames barwidth step  ;;call the plotting procedure
+;        ;BAR PLOT (linear reduction)
+;        let plotname "Bar future"
+;        let y-nest [[]]
+;        let ydata-2 (list now-per-year future-per-year 14000 9500)
+;        set ydata-2-plot lput ydata-2 item 0 y-nest
+;        let pencols (list black blue grey green) ;;colors of bars
+;        let pennames (list "You now" "You with change" "Your country" "Sustainable")
+;        let barwidth 1.2
+;        let step 0.01
+;
+;        barplot plotname ydata-2-plot pencols pennames barwidth step  ;;call the plotting procedure
 
 
       ]
@@ -473,17 +476,17 @@ to plot-the-future
         ] ;;end of plotting loop
 
 
-        ;BAR PLOT (actually same code as for linear)
-        let plotname "Bar future"
-        let y-nest [[]]
-        let ydata-2 (list now-per-year future-per-year 14000 9500)
-        set ydata-2-plot lput ydata-2 item 0 y-nest
-        let pencols (list black blue grey green) ;;colors of bars
-        let pennames (list "You now" "You with change" "Your country" "Sustainable")
-        let barwidth 1.2
-        let step 0.01
-
-        barplot plotname ydata-2-plot pencols pennames barwidth step  ;;call the plotting procedure
+;        ;BAR PLOT (actually same code as for linear)
+;        let plotname "Bar future"
+;        let y-nest [[]]
+;        let ydata-2 (list now-per-year future-per-year 14000 9500)
+;        set ydata-2-plot lput ydata-2 item 0 y-nest
+;        let pencols (list black blue grey green) ;;colors of bars
+;        let pennames (list "You now" "You with change" "Your country" "Sustainable")
+;        let barwidth 1.2
+;        let step 0.01
+;
+;        barplot plotname ydata-2-plot pencols pennames barwidth step  ;;call the plotting procedure
 
       ] ;end of if method = percentage
 
@@ -495,7 +498,7 @@ to plot-the-future
 end
 
 
-to-report new-per-week-str ;;for explanatory monitor with the future plots
+to-report new-per-week-str-reporter ;;for explanatory monitor with the future plots
   ;;ifelse ;;@could add 'cut down' vs 'scaled up'
   if reduction-method = "linear" [
    report (word "This is what a year would look like if you reduced your weekly plastic weight by " (abs change-per-week) " " unit ":")  ;" and instead used " new-per-week " " unit " per week:")
@@ -609,6 +612,9 @@ to-report arguenotes-data
   set an-data add-key-value an-data "In one month" precision (4 * weekly-weight) 2
   set an-data add-key-value an-data "In one year" precision (52 * weekly-weight) 2
   set an-data add-key-value an-data "In fifty years" precision (52 * 40 * weekly-weight) 2
+  set an-data add-key-value an-data "Use in one year after cutting" (precision future-per-year 2)
+  set an-data add-key-value an-data "Amount saved" precision (now-per-year - future-per-year) 2
+  set an-data add-key-value an-data "Cutting per week" ifelse-value (reduction-method =  "percentage") [(word percent-less-each-week "%")][(word change-per-week " " unit)]
 
 
 
@@ -883,7 +889,7 @@ change-per-week
 change-per-week
 -500
 0
--70.0
+-260.0
 10
 1
 Grams or Ounces
@@ -905,7 +911,7 @@ PLOT
 951
 565
 The future
-Time (one year)
+Time (Weeks)
 Amount
 0.0
 52.0
@@ -922,7 +928,7 @@ BUTTON
 950
 290
 Show Effect
-plot-the-future
+plot-the-future\nset new-per-week-str new-per-week-str-reporter
 NIL
 1
 T
@@ -1055,7 +1061,7 @@ percent-less-each-week
 percent-less-each-week
 -10
 0
--2.0
+-7.5
 .5
 1
 %
@@ -1104,7 +1110,7 @@ BUTTON
 610
 950
 690
-Send to ArgueNotes!
+Download Data!
 set log-data arguenotes-data\nset log-now? true
 NIL
 1
