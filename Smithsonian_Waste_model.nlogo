@@ -774,7 +774,7 @@ INPUTBOX
 115
 235
 number-of-items
-3.0
+0.0
 1
 0
 Number
@@ -988,7 +988,7 @@ INPUTBOX
 115
 315
 weight-of-item
-200.0
+0.0
 1
 0
 Number
@@ -1090,7 +1090,7 @@ INPUTBOX
 175
 115
 names
-asdf
+NIL
 1
 0
 String
@@ -1111,7 +1111,7 @@ BUTTON
 950
 690
 Download Data!
-set log-data arguenotes-data\nset log-now? true
+set log-data arguenotes-data\nset log-now? true\nsend-to:file \"MyData.json\" log-data
 NIL
 1
 T
