@@ -599,13 +599,13 @@ to-report arguenotes-data
   let an-data []
   set an-data add-key-value an-data "Names" saved-names
   set an-data add-key-value an-data "Unit" unit
-  set an-data add-key-value an-data "Waste list" waste-list
+  set an-data add-key-value an-data "Waste list" map [ n -> item 0 n] waste-list
   set an-data add-key-value an-data "Weight or CO2 pollution" calculate-this
   set an-data add-key-value an-data "Reduction method" reduction-method
-  set an-data add-key-value an-data "Amount reduced" ifelse-value (reduction-method =  "percentage") [(word percent-less-each-week "%")][(word change-per-week " " unit)]
-  set an-data add-key-value an-data "Current Yearly Weight" (word now-per-year " " unit)
-  set an-data add-key-value an-data "Future Yearly Weight" (word future-per-year " " unit)
-  set an-data add-key-value an-data "Weight Saved Per Year" (word (now-per-year - future-per-year) " " unit)
+  set an-data add-key-value an-data "Amount reduced" ifelse-value (reduction-method =  "percentage") [(word percent-less-each-week "%")][(word change-per-week)]
+  set an-data add-key-value an-data "Current Yearly Weight" (word now-per-year )
+  set an-data add-key-value an-data "Future Yearly Weight" (word future-per-year )
+  set an-data add-key-value an-data "Weight Saved Per Year" (word (now-per-year - future-per-year) )
   set an-data add-key-value an-data "Future Prediction (no savings)" current-projection
   set an-data add-key-value an-data "Future Prediction (with savings)" changed-projections
   set an-data add-key-value an-data "In one week" weekly-weight
@@ -614,7 +614,7 @@ to-report arguenotes-data
   set an-data add-key-value an-data "In fifty years" precision (52 * 40 * weekly-weight) 2
   set an-data add-key-value an-data "Use in one year after cutting" (precision future-per-year 2)
   set an-data add-key-value an-data "Amount saved" precision (now-per-year - future-per-year) 2
-  set an-data add-key-value an-data "Cutting per week" ifelse-value (reduction-method =  "percentage") [(word percent-less-each-week "%")][(word change-per-week " " unit)]
+  set an-data add-key-value an-data "Cutting per week" ifelse-value (reduction-method =  "percentage") [(word percent-less-each-week "%")][(word change-per-week)]
 
 
 
@@ -630,6 +630,34 @@ to-report add-key-value [adict k v]
   report lput (list k v) adict
 end
 
+
+to-report jsonify [aval]
+  if not is-list? aval [
+    if is-string? aval [
+      report (word "'" aval "'")
+    ]
+    if is-number? aval [
+      report aval
+    ]
+  ]
+  let inner "["
+  foreach but-last aval [ i ->
+    set inner (word inner i ",")
+  ]
+  set inner (word inner last aval "]")
+  report inner
+end
+
+to-report to-json [the-list]
+  let outstr "{"
+  foreach butlast the-list [ t ->
+   set outstr (word outstr  "'" item 0 t "' : ")
+    let instr jsonify  item 1 t
+    set outstr (word outstr instr ", ")
+  ]
+  set outstr (word outstr "'" item 0 last the-list "' : " jsonify item 1 last the-list "}")
+  report outstr
+end
 
 to-report current-projection
   let report-list []
@@ -988,7 +1016,7 @@ INPUTBOX
 115
 315
 weight-of-item
-0.0
+1525.0
 1
 0
 Number
@@ -1090,7 +1118,7 @@ INPUTBOX
 175
 115
 names
-NIL
+asdf
 1
 0
 String
@@ -1111,7 +1139,7 @@ BUTTON
 950
 690
 Download Data!
-set log-data arguenotes-data\nset log-now? true\nsend-to:file \"MyData.json\" log-data
+set log-data arguenotes-data\nset log-now? true\nsend-to:file \"MyData.json\" to-json arguenotes-data
 NIL
 1
 T
