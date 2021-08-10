@@ -844,7 +844,7 @@ INPUTBOX
 450
 130
 number-of-items
-4.0
+0.0
 1
 0
 Number
@@ -931,7 +931,7 @@ CHOOSER
 calculate-this
 calculate-this
 "Weight" "CO2 Emissions" "Water Useage" "Ends Up In Oceans"
-2
+0
 
 BUTTON
 495
@@ -959,7 +959,7 @@ change-per-week
 change-per-week
 -500
 0
--320.0
+0.0
 10
 1
 Grams or Ounces
@@ -1058,7 +1058,7 @@ INPUTBOX
 450
 210
 weight-of-item
-255.0
+0.0
 1
 0
 Number
@@ -1071,7 +1071,7 @@ CHOOSER
 unit
 unit
 "grams" "ounces"
-1
+0
 
 CHOOSER
 1034
@@ -1131,7 +1131,7 @@ percent-less-each-week
 percent-less-each-week
 -10
 0
--3.0
+0.0
 .5
 1
 %
@@ -1160,7 +1160,7 @@ INPUTBOX
 315
 130
 names
-art
+NIL
 1
 0
 String
