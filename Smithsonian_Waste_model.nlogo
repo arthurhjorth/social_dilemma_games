@@ -159,7 +159,7 @@ to calculate ;;after they've added all their waste
   ]
 
 ;;CO2 POLLUTION
-  if calculate-this = "CO2 pollution" [
+  if calculate-this = "CO2 Emissions" [
 
     output-print "---THE WEIGHT OF CO2 PRODUCED BY YOUR PLASTIC WASTE---"
     output-print ""
@@ -173,11 +173,7 @@ to calculate ;;after they've added all their waste
     ]
 
   ;;WEIGHT
-  if calculate-this = "weight" [
-
-
-
-
+  if calculate-this = "Weight" [
     output-print "---THE WEIGHT OF YOUR PLASTIC WASTE---"
     output-print ""
     output-print (word "In one week: " weekly-weight " " unit " (" (precision (weekly-weight * unit2-multiplier) 2) " " unit2 ") " )
@@ -189,7 +185,53 @@ to calculate ;;after they've added all their waste
     output-print (word "In 50 years: " (precision (52 * weekly-weight * 50) 2) " " unit " (" (precision (52 * weekly-weight * 50 * unit2-multiplier) 2) " " unit2 ") ")
   ]
 
+  ;;Water usage
+  if calculate-this = "Water Useage" [
+    output-print "---WATER USED TO PRODUCE YOUR PLASTIC---"
+    output-print ""
+    output-print (word "In one week: " (weekly-weight * water-multiplier) " " unit " (" (precision (weekly-weight * water-multiplier * unit2-multiplier * unit3-multiplier) 2) " " unit3 ") " )
+    output-print ""
+    output-print (word "In one month: " (precision (4 * weekly-weight * water-multiplier ) 2) " " unit " (" (precision (4 * weekly-weight * water-multiplier * unit2-multiplier * unit3-multiplier) 2) " " unit3 ") " ) ;@now simple: 4 weeks in a month (do 4.345 instead?)
+    output-print ""
+    output-print (word "In one year: " (precision (52 * weekly-weight * water-multiplier ) 2) " " unit " (" (precision (52 * weekly-weight * water-multiplier * unit2-multiplier * unit3-multiplier) 2) " " unit3 ") " )
+    output-print ""
+    output-print (word "In 50 years: " (precision (52 * weekly-weight * 50 * water-multiplier ) 2) " " unit " (" (precision (52 * weekly-weight * 50 * water-multiplier * unit2-multiplier * unit3-multiplier) 2) " " unit3 ") ")
+  ]
+
+  ;;Water usage
+  if calculate-this = "Ends Up In Oceans"  [
+    output-print "---AMOUNT OF YOUR PLASTIC THAT ENDS UP IN THE OCEANS---"
+    output-print ""
+    output-print (word "In one week: " weekly-weight " " unit " (" (precision (0.003 * weekly-weight * unit2-multiplier) 2) " " unit2 ") " )
+    output-print ""
+    output-print (word "In one month: " (precision (4 * weekly-weight) 2) " " unit " (" (precision (0.003 * 4 * weekly-weight * unit2-multiplier) 2) " " unit2 ") " ) ;@now simple: 4 weeks in a month (do 4.345 instead?)
+    output-print ""
+    output-print (word "In one year: " (precision (52 * weekly-weight) 2) " " unit " (" (precision (0.003 * 52 * weekly-weight * unit2-multiplier) 2) " " unit2 ") " )
+    output-print ""
+    output-print (word "In 50 years: " (precision (52 * weekly-weight * 50) 2) " " unit " (" (precision (0.003 * 52 * weekly-weight * 50 * unit2-multiplier) 2) " " unit2 ") ")
+  ]
+
+
+
 end
+
+to-report unit3
+  ifelse unit = "grams" [report "liters"][report "gallons"]
+end
+
+to-report unit3-multiplier
+  ifelse unit = "grams" [report 1][report 1 / 8]
+end
+
+
+to-report water-multiplier
+  ifelse unit = "grams" [report 184] [report 22 / 12] ; grams to water useage (grams) or ounces to water usesage (gallons)
+end
+
+to-report water-weight-unit
+  ifelse unit = "grams" [report "grams"][report "gallons"]
+end
+
 
 to-report unit2-multiplier
   ;how to get from grams to kilos or from ounces to pounds:
@@ -600,7 +642,7 @@ to-report arguenotes-data
   set an-data add-key-value an-data "Names" saved-names
   set an-data add-key-value an-data "Unit" unit
   set an-data add-key-value an-data "Waste list" map [ n -> item 0 n] waste-list
-  set an-data add-key-value an-data "Weight or CO2 pollution" calculate-this
+  set an-data add-key-value an-data "Weight or CO2 emissions" calculate-this
   set an-data add-key-value an-data "Reduction method" reduction-method
   set an-data add-key-value an-data "Amount reduced" ifelse-value (reduction-method =  "percentage") [(word percent-less-each-week "%")][(word change-per-week)]
   set an-data add-key-value an-data "Current Yearly Weight" (word now-per-year )
@@ -634,7 +676,7 @@ end
 to-report jsonify [aval]
   if not is-list? aval [
     if is-string? aval [
-      report (word "'" aval "'")
+      report (word "\"" aval "\"")
     ]
     if is-number? aval [
       report aval
@@ -651,11 +693,11 @@ end
 to-report to-json [the-list]
   let outstr "{"
   foreach butlast the-list [ t ->
-   set outstr (word outstr  "'" item 0 t "' : ")
+   set outstr (word outstr  "\"" item 0 t "\" : ")
     let instr jsonify  item 1 t
     set outstr (word outstr instr ", ")
   ]
-  set outstr (word outstr "'" item 0 last the-list "' : " jsonify item 1 last the-list "}")
+  set outstr (word outstr "\"" item 0 last the-list "\" : " jsonify item 1 last the-list "}")
   report outstr
 end
 
@@ -746,10 +788,10 @@ report report-list
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-899
-422
-932
-456
+1591
+401
+1624
+435
 -1
 -1
 8.333333333333334
@@ -773,11 +815,11 @@ ticks
 30.0
 
 BUTTON
-265
-55
-325
-115
-NIL
+5
+200
+315
+260
+GO
 setup
 NIL
 1
@@ -790,38 +832,38 @@ NIL
 1
 
 OUTPUT
-5
-375
-325
-695
+340
+270
+1021
+590
 11
 
 INPUTBOX
-5
-175
-115
-235
+340
+70
+450
+130
 number-of-items
-0.0
+4.0
 1
 0
 Number
 
 CHOOSER
+450
+70
+560
 115
-175
-225
-220
 choose-waste-type
 choose-waste-type
 "Small" "Medium" "Large"
 0
 
 BUTTON
-225
-175
-325
-235
+560
+70
+660
+130
 Add waste
 add-waste
 NIL
@@ -835,29 +877,29 @@ NIL
 1
 
 TEXTBOX
-5
-115
-325
-165
-1a. For each plastic group (Small, Medium Large), input the number of items you use in ONE WEEK and press 'Add waste':
-14
-0.0
-1
-
-TEXTBOX
-5
-235
-275
-255
-1b. Or add specific weights:
-14
-0.0
-1
-
-TEXTBOX
-345
+340
 10
-695
+660
+60
+2. For each plastic group (Small, Medium Large), input the number of items you use in ONE WEEK and press 'Add waste':
+14
+0.0
+1
+
+TEXTBOX
+340
+130
+610
+150
+Or add specific weights:
+14
+0.0
+1
+
+TEXTBOX
+675
+10
+1025
 76
 3. Choose what impact you want to learn about and press CALCULATE to see your results.
 14
@@ -865,10 +907,10 @@ TEXTBOX
 1
 
 BUTTON
-485
-55
-625
-100
+675
+115
+1005
+160
 CALCULATE!
 calculate
 NIL
@@ -882,20 +924,20 @@ NIL
 1
 
 CHOOSER
-345
-55
-482
-100
+675
+70
+1005
+115
 calculate-this
 calculate-this
-"weight" "CO2 pollution"
-0
+"Weight" "CO2 Emissions" "Water Useage" "Ends Up In Oceans"
+2
 
 BUTTON
-160
-320
-325
-370
+495
+215
+660
+265
 Show What I added
 show-waste-list
 NIL
@@ -909,15 +951,15 @@ NIL
 1
 
 SLIDER
-345
-220
-695
-253
+1034
+115
+1384
+148
 change-per-week
 change-per-week
 -500
 0
--260.0
+-320.0
 10
 1
 Grams or Ounces
@@ -928,16 +970,16 @@ TEXTBOX
 10
 315
 45
-0. Write your name(s), choose your preferred weight unit and press 'setup' to begin:
+1. Write your name(s), choose your preferred weight unit and press 'GO' to begin:
 14
 0.0
 1
 
 PLOT
-345
-380
-951
-565
+1035
+325
+1641
+545
 The future
 Time (Weeks)
 Amount
@@ -951,10 +993,10 @@ true
 PENS
 
 BUTTON
-695
-175
-950
-290
+1384
+70
+1639
+185
 Show Effect
 plot-the-future\nset new-per-week-str new-per-week-str-reporter
 NIL
@@ -968,10 +1010,10 @@ NIL
 1
 
 MONITOR
-525
-565
-690
-610
+1217
+544
+1382
+589
 Yearly weight with change
 (word (precision future-per-year 2) \" \" unit)
 17
@@ -979,10 +1021,10 @@ Yearly weight with change
 11
 
 MONITOR
-345
-565
-525
-610
+1037
+544
+1217
+589
 Current yearly weight
 (word now-per-year \" \" unit)
 17
@@ -990,20 +1032,20 @@ Current yearly weight
 11
 
 TEXTBOX
-345
-115
-940
-155
+1034
+10
+1629
+50
 4. What if you changed your weekly plastic use? Choose a reduction strategy and move the slider to see your impact for one year with and without the change:
 14
 0.0
 1
 
 MONITOR
-345
-320
-950
-377
+1035
+270
+1640
+327
 NIL
 new-per-week-str
 17
@@ -1011,41 +1053,41 @@ new-per-week-str
 14
 
 INPUTBOX
-5
-255
-115
-315
+340
+150
+450
+210
 weight-of-item
-1525.0
+255.0
 1
 0
 Number
 
 CHOOSER
-175
-55
-267
-100
+5
+140
+315
+185
 unit
 unit
 "grams" "ounces"
 1
 
 CHOOSER
-345
-175
-695
-220
+1034
+70
+1384
+115
 reduction-method
 reduction-method
 "linear" "percentage"
 1
 
 BUTTON
-225
-255
-325
-315
+560
+150
+660
+210
 Add weight
 add-custom-waste
 NIL
@@ -1059,10 +1101,10 @@ NIL
 1
 
 MONITOR
-115
-255
-225
-300
+450
+150
+560
+195
 unit
 unit
 17
@@ -1070,10 +1112,10 @@ unit
 11
 
 MONITOR
-690
-565
-950
-610
+1382
+544
+1642
+589
 Plastic weight saved yearly
 (word (precision (now-per-year - future-per-year) 2) \" \" unit)
 17
@@ -1081,25 +1123,25 @@ Plastic weight saved yearly
 11
 
 SLIDER
-345
-255
-695
-288
+1034
+150
+1384
+183
 percent-less-each-week
 percent-less-each-week
 -10
 0
--7.5
+-3.0
 .5
 1
 %
 HORIZONTAL
 
 BUTTON
-5
-320
-150
-370
+340
+215
+485
+265
 Undo Last Added Item
 if waste-list != 0 [\nif length waste-list > 0 [\nset waste-list butfirst waste-list\nshow-waste-list\n]\n]\n
 NIL
@@ -1113,31 +1155,31 @@ NIL
 1
 
 INPUTBOX
-0
-55
-175
-115
+5
+70
+315
+130
 names
-asdf
+art
 1
 0
 String
 
 TEXTBOX
-345
-620
-670
-675
-5. When you have made a projection that you want to share with the class, click here to send your data to ArguNotes.
+1039
+592
+1632
+647
+5. When you have made a projection that you want to share with the class, click here to download your data so you can upload them to ArguNotes.
 14
 0.0
 1
 
 BUTTON
-690
-610
-950
-690
+1039
+625
+1645
+692
 Download Data!
 set log-data arguenotes-data\nset log-now? true\nsend-to:file \"MyData.json\" to-json arguenotes-data
 NIL
@@ -1534,7 +1576,7 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.2.0
+NetLogo 6.1.1
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
